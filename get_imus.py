@@ -98,7 +98,7 @@ pihat_mat_ls = []
 trio = fam[(fam.PID != '0') & ((fam.MID != '0'))] #extract all individuals with both parents in dataset
 for iid in trio.IID.values:
     pid, mid = str(trio[trio.IID == iid].PID.values[0]), str(trio[trio.IID == iid].MID.values[0])
-    pat = df[((df.IID1 == pid) & (df.IID2 == iid)) | ((df.IID1 == iid) & (df.IID2 == pid))]
+    pat = ibd[((ibd.IID1 == pid) & (ibd.IID2 == iid)) | ((ibd.IID1 == iid) & (ibd.IID2 == pid))]
     assert len(pat)<=1, f'{pat}'
     if len(pat) == 0:
 #        print(f'PID not in dataset ({pid})')
@@ -107,7 +107,7 @@ for iid in trio.IID.values:
     else:
         pihat_pat = pat.PI_HAT.values[0]
         pihat_pat_ls.append(pihat_pat)
-    mat = df[((df.IID1 == mid) & (df.IID2 == iid)) | ((df.IID1 == iid) & (df.IID2 == mid))]
+    mat = ibd[((ibd.IID1 == mid) & (ibd.IID2 == iid)) | ((ibd.IID1 == iid) & (ibd.IID2 == mid))]
     assert len(mat)<=1, f'{mat}'
     if len(mat) == 0:
 #        print(f'MID not in dataset ({mid})')
@@ -117,9 +117,16 @@ for iid in trio.IID.values:
         pihat_mat = mat.PI_HAT.values[0]
         pihat_mat_ls.append(pihat_mat)
     if ((pihat_pat!=None)&(pihat_mat!=None)):
-        if ((abs(pihat_pat-0.5)>0.1) | (abs(pihat_mat-0.5)>0.1)):
+        if ((abs(pihat_pat-0.5)>0.05) | (abs(pihat_mat-0.5)>0.05)):
             print(f'{iid}\tFather ({pid}): {pihat_pat}\t Mother ({mid}): {pihat_mat}')
-    
+
+#check number of unique fathers, mothers. If both numbers are the same, there are no half siblings
+len(set(trio.PID))
+len(set(trio.MID))
+
+parents = set(trio.PID).union(set(trio.MID))
+
+parents_w_gt = set(fam.IID).intersection(parents)
     
 plt.hist(np.asarray(pihat_pat_ls),100, alpha=0.5)
 plt.hist(np.asarray(pihat_mat_ls),100, alpha=0.5)
@@ -278,17 +285,128 @@ elapsed = datetime.datetime.now() - start
 print(f'Time for getting IMUS: {round(elapsed.seconds/60, 2)} minutes')
 np.savetxt('imus',np.asarray(imus),fmt='%s')
 
-    
+
+
+
+plt.hist(imiss[imiss.F_MISS>0.02].F_MISS,50)
+plt.xlabel("missing rate")
+plt.ylabel("count")
+
+
+#check maximum PC for Europeans
+pc = pd.read_csv(wd+'spark.menv.mds_cov',delim_whitespace=True)
+eur = pc[pc.FID.str.contains('eur')]
+max(eur.C1)
+asn = pc[pc.FID.str.contains('asn')]
+max(asn.C2) #threshold at -0.0244
+afr = pc[pc.FID.str.contains('afr')]
+amr = pc[pc.FID.str.contains('amr')]
+min(amr.C2)
+
+aut_pc = pc[pc.FID.str.contains('aut')]
+
+#get set of all complete trios with only European parents
+eur_parents = pd.read_csv(wd+'SPARK.eur_parents',delim_whitespace=True,names=['FID','IID'])  #parents who are in a trio and are european (not necessarily a trio with only european parents)
+eur_children = fam[(fam.PID.isin(eur_parents.IID) & fam.MID.isin(eur_parents.IID))] #children with only european parents
+eur_both_parents = fam[(fam.IID.isin(eur_children.PID)) | (fam.IID.isin(eur_children.MID))] #subset of fam with parents of european trios
+eur_trios = fam[(fam.PID.isin(eur_parents.IID) & fam.MID.isin(eur_parents.IID)) | ((fam.IID.isin(eur_children.PID)) | (fam.IID.isin(eur_children.MID)))]
+
+np.savetxt(wd+'eur_trios.keep', eur_trios[['FID','IID']].values, fmt='%s')
+
+mix_eur_children = fam[((fam.PID.isin(eur_parents.IID) & ~fam.MID.isin(eur_parents.IID)) | #children in trios who have exactly one parent who is European
+        (~fam.PID.isin(eur_parents.IID) & fam.MID.isin(eur_parents.IID)))]
+
+#get set of Asian parents
+asn_parents = aut_pc[aut_pc.C2<-0.0244][['FID','IID']]
+asn_children = fam[(fam.PID.isin(asn_parents.IID) & fam.MID.isin(asn_parents.IID))]
+mix_asn_children =  fam[((fam.PID.isin(asn_parents.IID) & ~fam.MID.isin(asn_parents.IID)) | 
+        (~fam.PID.isin(asn_parents.IID) & fam.MID.isin(asn_parents.IID)))]
+asn_both_parents = fam[(fam.IID.isin(asn_children.PID)) | (fam.IID.isin(asn_children.MID))]
+asn_mother_eur_father_children =  fam[(fam.PID.isin(eur_parents.IID) & fam.MID.isin(asn_parents.IID))]
+asn_father_eur_mother_children =  fam[(fam.PID.isin(asn_parents.IID) & fam.MID.isin(eur_parents.IID))]
 
 
 
 
 
+## SPARK May 2019 version
+
+wd = '/Users/nbaya/Documents/lab/genotype-qc/spark/'
+
+# get parents
+
+preimp1 = pd.read_csv(wd+'SPARK.27K.genotype.20190501_preimp1.fam',
+                      delim_whitespace=True,names=['fid','iid','pat','mat','sex','phe'])
+
+parents_ls = list(set(preimp1[preimp1.pat!='0'].pat).union(set(preimp1[preimp1.mat!='0'].mat)))
+
+parents = preimp1[preimp1.iid.isin(parents_ls)]
+
+parents.to_csv(wd+'SPARK.27K.genotype.20190501_preimp1parents.fam',index=False,header=False,sep=' ')
+
+founders = preimp1[(preimp1.pat=='0')&(preimp1.mat=='0')]
 
 
+# get unrelated parents
 
+ibd = pd.read_csv(wd+'SPARK.27K.genotype.20190501_preimp1parents.pihat',
+                      delim_whitespace=True)
 
+#ibd = ibd.assign(freq_IID1=ibd.groupby('IID1')['IID1'].transform('count'))
+#ibd = ibd.sort_values(by='freq_IID1',ascending=True) #sort so that individuals with many connections are left to the end of the algorithm (this should maximize the unrelated set)
 
+fam = pd.read_csv(wd+'SPARK.27K.genotype.20190501_preimp1parents.fam',delimiter=' ',names=['FID','IID','PID','MID','SEX','PHEN'])
 
+def remove_related(iid, remaining_ids, ibd_iid1, ibd_iid2):
+    #only remove individuals with one degree of relatedness to iid (neighboring nodes in network graph)
+#    print(f'removing {iid}')
+    remaining_ids.remove(iid)
+    related = []
+#    print(f'ct of {iid} in iid1: {ibd_iid1.count(iid)}')
+#    print(f'ct of {iid} in iid2: {ibd_iid2.count(iid)}')
+    while iid in ibd_iid1:                  # for all iid entries in iid1
+        idx1 = ibd_iid1.index(iid)          # get index of first instance of iid in ibd_iid1
+        ibd_iid1.remove(iid)                # remove instance of iid from ibd_iid1
+        related.append(ibd_iid2.pop(idx1))  # pop iid2 corresponding to iid instance in iid1 and append to list of relateds
+    while iid in ibd_iid2:                  # for all iid entries in iid2
+        idx2 = ibd_iid2.index(iid)          # get index of first instance of iid in ibd_iid2
+        ibd_iid2.remove(iid)                # remove instance of iid for ibd_iid2
+        related.append(ibd_iid1.pop(idx2))  # pop iid1 corresponding to iid instance in iid2 and append to list of relateds
+#    print(f'related for {iid}: {related}')
+    remaining_ids = [x for x in remaining_ids if x not in related] #remove all related individuals to iid from remaining_ids
+    return remaining_ids, ibd_iid1, ibd_iid2
 
+ibd_iid1 = ibd.IID1.tolist()
+ibd_iid2 = ibd.IID2.tolist()
+ibd_ids = list(set(ibd_iid1+ibd_iid2))
+#ct_ls = []
+#len_ibd_ids = len(ibd_ids)
+#for i, iid in enumerate(ibd_ids):
+#    if i%100==0:
+#        print(f'{round(100*i/len_ibd_ids,2)}% complete')
+#    ct = ibd_iid1.count(iid) + ibd_iid2.count(iid) #count occurrences of iid in both iid1 and iid2 lists
+#    ct_ls.append((iid,ct))
+#ct_ls0 = ct_ls.copy()
+#ct_ls_tmp = sorted(ct_ls, key=lambda x: x[1]) #sort to have people with the fewest connections at the start, and those with the most at the end. This should maximize the unrelated set, although it is slow.
+
+ibd_ids = [x[0] for x in ct_ls_tmp]
+
+all_ids = set(fam.IID)
+unrelated = list(set(all_ids).difference(ibd_ids)) #add people who are completely unrelated, i.e. not in .genome file
+remaining_ids = list(ibd_ids)
+start = datetime.datetime.now()
+print('Getting unrelated individuals...')
+ii = 0
+while len(remaining_ids)>0:
+    print(f'iteration {ii}')
+    iid = remaining_ids[0] #get first element
+    unrelated.append(iid)
+    remaining_ids, ibd_iid1, ibd_iid2 = remove_related(iid=iid, 
+                                                       remaining_ids=remaining_ids, 
+                                                       ibd_iid1=ibd_iid1, 
+                                                       ibd_iid2=ibd_iid2)
+    ii += 1
+elapsed = datetime.datetime.now() - start
+print(f'Time for getting unrelated individuals: {round(elapsed.seconds/60, 2)} minutes')
+np.savetxt('unrelated',np.asarray(unrelated),fmt='%s')
 
