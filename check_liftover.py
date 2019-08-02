@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Aug  2 07:46:28 2019
+
+Compare hail liftover vs. Danfeng's liftover on the cluster
+
+@author: nbaya
+"""
+
+import pandas as pd
+
+wd = '/Users/nbaya/Documents/lab/genotype-qc/spark/'
+
+cluster_lift = pd.read_csv(wd+'SPARK.27K.genotype.20190501.hg19.bim',
+                           delim_whitespace=True,header=None,
+                           names=['chr','varid','cm','bp','a1','a2'])
+hail_lift = pd.read_csv(wd+'SPARK.27K.genotype.20190501.liftover.bim',
+                        delim_whitespace=True,header=None,
+                        names=['chr','varid','cm','bp','a1','a2'])
+
+len(hail_lift[(hail_lift.chr != 'MT')&
+              (hail_lift.chr != 'X')&
+              (hail_lift.chr != 'Y')])
+
+len(cluster_lift)
+
+sorted([str(x) for x in list(set(hail_lift.chr))])
+sorted([str(x) for x in list(set(cluster_lift.chr))])
+
+hail_autosomes = set(hail_lift[(hail_lift.chr != 'MT')&(hail_lift.chr != 'X')&(hail_lift.chr != 'Y')].varid)
+cluster_autosomes = set(cluster_lift.varid)
+print(f'Number of SNPs in cluster autosomes: {len(cluster_autosomes)}') #613695
+print(f'Number of SNPs in hail autosomes: {len(hail_autosomes)}') #613651
+
+intersect = hail_autosomes.intersection(cluster_autosomes)
+print(f'Number of SNPs in intersection of autosomes: {len(intersect)}') #613647
+
+union = hail_autosomes.union(cluster_autosomes)
+print(f'Number of SNPs in union of autosomes: {len(union)}') #613699
+
+hail_diff_cluster = hail_autosomes.difference(cluster_autosomes)
+print(f'Number of SNPs in hail but not cluster: {len(hail_diff_cluster)}') #4
+
+cluster_diff_hail = cluster_autosomes.difference(hail_autosomes)
+print(f'Number of SNPs in cluster but not hail: {len(cluster_diff_hail)}') #48
+
+
+new_cluster_lift = cluster_lift.copy()
+new_cluster_lift.loc[new_cluster_lift.varid.str.contains('GSA'),'varid'] = new_cluster_lift[new_cluster_lift.varid.str.contains('GSA')].varid.str.split('-',expand=True)[1]
+new_cluster_lift.loc[new_cluster_lift.varid.str.contains('seq'),'varid'] = new_cluster_lift[new_cluster_lift.varid.str.contains('seq')].varid.str.split('-',expand=True)[1]
+
+
+
+
+cluster_lift.loc[(cluster_lift.varid.str.contains('GSA'))&
+                 (~cluster_lift.varid.str.contains('rs')),'GSA_match'] = (
+                 cluster_lift[(cluster_lift.varid.str.contains('GSA'))&
+                              (~cluster_lift.varid.str.contains('rs'))].varid.str.split('-',expand=True)[1]
+                 ==(cluster_lift[(cluster_lift.varid.str.contains('GSA'))&(~cluster_lift.varid.str.contains('rs'))].chr.astype('str')+':'+
+                                 cluster_lift[(cluster_lift.varid.str.contains('GSA'))&(~cluster_lift.varid.str.contains('rs'))].bp.astype('str')))
+
+cluster_lift[cluster_lift.GSA_match==False]
+
+hail_lift.loc[(hail_lift.varid.str.contains('GSA'))&
+                 (~hail_lift.varid.str.contains('rs')),'GSA_match'] = (
+                 hail_lift[(hail_lift.varid.str.contains('GSA'))&
+                              (~hail_lift.varid.str.contains('rs'))].varid.str.split('-',expand=True)[1]
+                 ==(hail_lift[(hail_lift.varid.str.contains('GSA'))&(~hail_lift.varid.str.contains('rs'))].chr.astype('str')+':'+
+                                 hail_lift[(hail_lift.varid.str.contains('GSA'))&(~hail_lift.varid.str.contains('rs'))].bp.astype('str')))
+
+hail_lift[hail_lift.GSA_match==False]
+
+
+
+original = pd.read_csv(wd+'SPARK.27K.genotype.20190501.bim',
+                           delim_whitespace=True,header=None,
+                           names=['chr','varid','cm','bp','a1','a2']) #632015
+
+original_autosomes = set(original[original.chr<=22].varid) #613701
+
+original_diff_hail = original_autosomes.difference(hail_autosomes)
+print(f'Number of SNPs in original but not hail: {len(original_diff_hail)}') #50
+
+original_diff_cluster = original_autosomes.difference(cluster_autosomes)
+print(f'Number of SNPs in original but not cluster: {len(original_diff_cluster)}') #6
+
