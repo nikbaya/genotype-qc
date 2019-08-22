@@ -77,11 +77,41 @@ original = pd.read_csv(wd+'SPARK.27K.genotype.20190501.bim',
                            delim_whitespace=True,header=None,
                            names=['chr','varid','cm','bp','a1','a2']) #632015
 
+all_original_diff_cluster = set(original.varid).difference(cluster_lift.varid)
+print(f'Number of SNPs in original but not cluster: {len(all_original_diff_cluster )}') #56
+
+all_original_diff_hail = set(original.varid).difference(hail_lift.varid)
+print(f'Number of SNPs in original but not hail: {len(all_original_diff_hail )}') #56
+
 original_autosomes = set(original[original.chr<=22].varid) #613701
 
 original_diff_hail = original_autosomes.difference(hail_autosomes)
-print(f'Number of SNPs in original but not hail: {len(original_diff_hail)}') #50
+print(f'Number of autosomal SNPs in original but not hail: {len(original_diff_hail)}') #50
 
 original_diff_cluster = original_autosomes.difference(cluster_autosomes)
-print(f'Number of SNPs in original but not cluster: {len(original_diff_cluster)}') #6
+print(f'Number of autosomal SNPs in original but not cluster: {len(original_diff_cluster)}') #6
+original[original.varid.isin(original_diff_cluster)]
 
+
+# check for variants on which hail and danfeng's versions _disagreed_ wrt the positions of the variants
+
+merged = cluster_lift.merge(hail_lift, on=['varid'])
+
+merged[(merged.bp_x!=merged.bp_y)][['varid','chr_x','bp_x','chr_y','bp_y']]
+
+
+# check preimp3 version
+
+hail_preimp3 = pd.read_csv(wd+'SPARK.27K.genotype.20190501.hail_hg19_preimp3.bim',
+                           delim_whitespace=True,header=None,
+                           names=['chr','varid','cm','bp','a1','a2'])
+
+cluster_preimp3 = pd.read_csv(wd+'SPARK.27K.genotype.20190501.cluster_hg19_preimp3.bim',
+                           delim_whitespace=True,header=None,
+                           names=['chr','varid','cm','bp','a1','a2'])
+
+preimp3_cluster_diff_hail = set(cluster_preimp3.varid).difference(hail_preimp3.varid)
+preimp3_hail_diff_cluster = set(hail_preimp3.varid).difference(cluster_preimp3.varid)
+
+cluster_preimp3[cluster_preimp3.varid.isin(preimp3_cluster_diff_hail)]
+hail_preimp3[hail_preimp3.varid.isin(preimp3_hail_diff_cluster)]

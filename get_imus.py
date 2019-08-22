@@ -335,27 +335,27 @@ wd = '/Users/nbaya/Documents/lab/genotype-qc/spark/'
 
 # get parents
 
-preimp1 = pd.read_csv(wd+'SPARK.27K.genotype.20190501_preimp1.fam',
+preimp = pd.read_csv(wd+'SPARK.27K.genotype.20190501.hg19_preimp3.fam',
                       delim_whitespace=True,names=['fid','iid','pat','mat','sex','phe'])
 
-parents_ls = list(set(preimp1[preimp1.pat!='0'].pat).union(set(preimp1[preimp1.mat!='0'].mat)))
+parents_ls = list(set(preimp[preimp.pat!='0'].pat).union(set(preimp[preimp.mat!='0'].mat)))
 
-parents = preimp1[preimp1.iid.isin(parents_ls)]
+parents = preimp[preimp.iid.isin(parents_ls)]
 
-parents.to_csv(wd+'SPARK.27K.genotype.20190501_preimp1parents.fam',index=False,header=False,sep=' ')
+parents.to_csv(wd+'SPARK.27K.genotype.20190501.hg19_preimp3.parents.fam',index=False,header=False,sep=' ')
 
-founders = preimp1[(preimp1.pat=='0')&(preimp1.mat=='0')]
+founders = preimp[(preimp.pat=='0')&(preimp.mat=='0')]
 
 
 # get unrelated parents
 
-ibd = pd.read_csv(wd+'SPARK.27K.genotype.20190501_preimp1parents.pihat',
+ibd = pd.read_csv(wd+'SPARK.27K.genotype.20190501_preimp3parents.pihat',
                       delim_whitespace=True)
 
 #ibd = ibd.assign(freq_IID1=ibd.groupby('IID1')['IID1'].transform('count'))
 #ibd = ibd.sort_values(by='freq_IID1',ascending=True) #sort so that individuals with many connections are left to the end of the algorithm (this should maximize the unrelated set)
 
-fam = pd.read_csv(wd+'SPARK.27K.genotype.20190501_preimp1parents.fam',delimiter=' ',names=['FID','IID','PID','MID','SEX','PHEN'])
+fam = pd.read_csv(wd+'SPARK.27K.genotype.20190501_preimp3parents.fam',delimiter=' ',names=['FID','IID','PID','MID','SEX','PHEN'])
 
 def remove_related(iid, remaining_ids, ibd_iid1, ibd_iid2):
     #only remove individuals with one degree of relatedness to iid (neighboring nodes in network graph)
@@ -381,7 +381,7 @@ ibd_iid2 = ibd.IID2.tolist()
 ibd_ids = list(set(ibd_iid1+ibd_iid2))
 #ct_ls = []
 #len_ibd_ids = len(ibd_ids)
-#for i, iid in enumerate(ibd_ids):
+#for i, iid in enumerate(ibd_ids): #REALLY SLOW (~20-30 min?)
 #    if i%100==0:
 #        print(f'{round(100*i/len_ibd_ids,2)}% complete')
 #    ct = ibd_iid1.count(iid) + ibd_iid2.count(iid) #count occurrences of iid in both iid1 and iid2 lists
@@ -410,3 +410,84 @@ elapsed = datetime.datetime.now() - start
 print(f'Time for getting unrelated individuals: {round(elapsed.seconds/60, 2)} minutes')
 np.savetxt('unrelated',np.asarray(unrelated),fmt='%s')
 
+
+
+## ALTERNATIVE VERSION of getting maximum unrelated set
+
+ibd = pd.read_csv(wd+'/preimp3/SPARK.27K.genotype.20190501.hg19_preimp3.parents.genome.gz',
+                      delim_whitespace=True,compression='gzip')
+ibd = ibd[['FID1','IID1','FID2','IID2','PI_HAT']]
+
+fam = pd.read_csv(wd+'/preimp3/SPARK.27K.genotype.20190501.hg19_preimp3.parents.fam',
+                  delimiter=' ',
+                  names=['FID','IID','PID','MID','SEX','PHEN'])
+
+def remove_related_alt(iid, remaining_ids, iid1iid2):
+    #only remove individuals with one degree of relatedness to iid (neighboring nodes in network graph)
+    remaining_ids.remove(iid)
+    print(f'{iid}: {ct_dict[iid]}')
+    rows_w_iid = [x for x in iid1iid2 if iid in x] #pairs of iids that have iid in them
+    iids_in_rows = set.union(*rows_w_iid) #set of iids from rows that have iid in them
+    iids_in_rows.remove(iid) #remove iid from set of iids
+    related = list(iids_in_rows)
+    print(related)
+    remaining_ids = [x for x in remaining_ids if x not in related] #remove all related individuals to iid from remaining_ids
+    return remaining_ids, iid1iid2
+
+ibd_iid1 = ibd.IID1.tolist()
+ibd_iid2 = ibd.IID2.tolist()
+ibd_ids = list(set(ibd_iid1+ibd_iid2))
+print('Starting to count connections...')
+start_ct = datetime.datetime.now()
+ct_ls = []
+len_ibd_ids = len(ibd_ids)
+for i, iid in enumerate(ibd_ids): #REALLY SLOW (~20-30 min?), ~7 min for preimp3
+    if i%100==0:
+        print(f'{round(100*i/len_ibd_ids,2)}% complete')
+    ct = ibd_iid1.count(iid) + ibd_iid2.count(iid) #count occurrences of iid in both iid1 and iid2 lists
+    ct_ls.append((iid,ct))
+ct_ls0 = ct_ls.copy()
+ct_ls_tmp = sorted(ct_ls, key=lambda x: x[1]) #sort to have people with the fewest connections at the start, and those with the most at the end. This should maximize the unrelated set, although it is slow.
+ct_dict = dict(ct_ls_tmp)
+print(f'Time to count connections: {round((datetime.datetime.now() - start_ct).seconds/60, 2)} minutes')
+
+
+ibd_ids = [x[0] for x in ct_ls_tmp]
+
+iid1iid2 = list(zip(ibd.IID1.tolist(), ibd.IID2.tolist()))
+iid1iid2  = [set(x) for x in iid1iid2]
+
+all_ids = set(fam.IID)
+unrelated = list(set(all_ids).difference(ibd_ids)) #add people who are completely unrelated, i.e. not in .genome file
+remaining_ids = list(ibd_ids)
+start = datetime.datetime.now()
+print('Getting unrelated individuals...')
+ii = 0
+while len(remaining_ids)>0:
+    print(f'\titeration {ii}')
+    iid = remaining_ids[0] #get first element
+    unrelated.append(iid)
+    remaining_ids, iid1iid2 = remove_related_alt(iid=iid, 
+                                                 remaining_ids=remaining_ids, 
+                                                 iid1iid2=iid1iid2)
+    ii += 1
+print(f'Time for getting unrelated individuals: {round((datetime.datetime.now() - start).seconds/60, 2)} minutes')
+#np.savetxt('unrelated',np.asarray(unrelated),fmt='%s')
+
+#check random sample:
+n_samples = 1000
+for i in range(n_samples):
+    print(f'{round(i/n_samples*100,2)}%')
+    id1 = unrelated[np.random.randint(len(unrelated))]
+    id2 = unrelated[np.random.randint(len(unrelated))]
+    while id1 == id2:
+        id1 = unrelated[np.random.randint(len(unrelated))]
+        id2 = unrelated[np.random.randint(len(unrelated))]
+#    print(f'{id1}, {id2}')
+    assert len(ibd[((ibd.IID1==id1)&(ibd.IID2==id2))|((ibd.IID1==id2)&(ibd.IID2==id1))]) == 0, f'{id1}, {id2} FAILED'
+    assert len(ibd[((ibd.IID1==id1))|((ibd.IID2==id1))]) >= 0, f'{id1} FAILED'
+    assert len(ibd[((ibd.IID1==id1))|((ibd.IID2==id1))]) >= 0, f'{id2} FAILED'
+
+
+unrelated_parents = fam[fam.IID.isin(unrelated)]
+unrelated_parents.to_csv(wd+'SPARK.27K.genotype.20190501_preimp3parentsIMUS.fam',index=False,header=False,sep=' ')
