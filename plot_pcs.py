@@ -310,23 +310,25 @@ preimp3_fam = pd.read_csv(wd+'SPARK.27K.genotype.20190501.hg19_preimp3.fam',
                           names=['FID','IID','PAT','MAT','SEX','PHEN'])
 
 ## get white parents ##
-children_w_white_mother = df_child[(df_child.mother_race_white==1)&(df_child.mother_race_more_than_one_calc!=1)][['IID','FID']]
-children_w_white_father = df_child[(df_child.father_race_white==1)&(df_child.father_race_more_than_one_calc!=1)][['IID','FID']]
-white_mother_IIDs = set(preimp3_fam[preimp3_fam.IID.isin(children_w_white_mother.IID)].MAT.values)
-white_father_IIDs = set(preimp3_fam[preimp3_fam.IID.isin(children_w_white_father.IID)].PAT.values)
-white_mother_IIDs.remove('0')
-white_father_IIDs.remove('0')
-white_parent_IIDs = white_mother_IIDs.union(white_father_IIDs)
-white_parents = preimp3_fam[preimp3_fam.IID.isin(white_parent_IIDs)]
-
-# get all individuals who identify as only being white
-white_individuals = preimp3_fam[preimp3_fam.IID.isin(white_parent_IIDs)|(preimp3_fam.MAT.isin(white_parent_IIDs)&preimp3_fam.PAT.isin(white_parent_IIDs))]
+#children_w_white_mother = df_child[(df_child.mother_race_white==1)&(df_child.mother_race_more_than_one_calc!=1)][['IID','FID']]
+#children_w_white_father = df_child[(df_child.father_race_white==1)&(df_child.father_race_more_than_one_calc!=1)][['IID','FID']]
+#white_mother_IIDs = set(preimp3_fam[preimp3_fam.IID.isin(children_w_white_mother.IID)].MAT.values)
+#white_father_IIDs = set(preimp3_fam[preimp3_fam.IID.isin(children_w_white_father.IID)].PAT.values)
+#white_mother_IIDs.remove('0')
+#white_father_IIDs.remove('0')
+#white_parent_IIDs = white_mother_IIDs.union(white_father_IIDs)
+#white_parents = preimp3_fam[preimp3_fam.IID.isin(white_parent_IIDs)]
+#
+## get all individuals who identify as only being white
+#white_individuals = preimp3_fam[preimp3_fam.IID.isin(white_parent_IIDs)|(preimp3_fam.MAT.isin(white_parent_IIDs)&preimp3_fam.PAT.isin(white_parent_IIDs))]
 
 # get parents labeled by ancestry
 anc_ls = ['asian','african_amer','native_amer','native_hawaiian','white','hispanic']
 anc_dict = dict(zip(anc_ls,[None]*len(anc_ls)))
 assert len(preimp3_fam.IID)==len(set(preimp3_fam.IID)), 'there are individuals with duplicate IIDs, be careful!'
 
+
+#label individuals by ancestry
 for ancestry in anc_ls:
     if ancestry != 'hispanic':
         children_w_ancestry_mother = df_child[(df_child[f'mother_race_{ancestry}']==1)&(df_child.mother_race_more_than_one_calc!=1)&
@@ -626,3 +628,691 @@ plt.xlabel('A1 frequency (1kg eur ref)')
 plt.ylabel('A1 frequency (SPARK eur)')
 
 
+
+
+# get population labels for HGDP
+
+
+preimp7_wd = '/Users/nbaya//Documents/lab/genotype-qc/spark/preimp7_imus/'
+
+version = 'v3' # options: v1, v2, v3. v1 used GRCh38 HGDP w/ GRCh37 SPARK data. v2 used GRCh37 versions of both. v3 is the same as v2 except with 70 SNPs removed, which had European AF differences between HGDP and SPARK greater than 0.2 
+
+if version =='v1':
+    pca_hgdp = pd.read_csv(preimp7_wd+'preimp7.founders.imus.hgdp.menv.mds', delim_whitespace=True)
+elif version == 'v2' or version=='v3':
+    pca_hgdp = pd.read_csv(preimp7_wd+f'preimp7.founders.imus.hgdp_{version}.menv.mds', delim_whitespace=True)
+    
+# PC flips to make it easier to compare:
+if version == 'v2':
+    pcs_to_flip = [3]
+    for pc in pcs_to_flip:
+        pca_hgdp[f'C{pc}'] = -pca_hgdp[f'C{pc}']
+if version== 'v3':
+    pass
+    
+hgdp_labels = pd.read_csv(preimp7_wd+'hgdp_wgs.20190516.metadata.txt', delim_whitespace=True)
+
+hgdp_labels[['sample','population','region']]
+
+set(hgdp_labels.region) # {'AFRICA','AMERICA', 'CENTRAL_SOUTH_ASIA', 'EAST_ASIA', 'EUROPE', 'MIDDLE_EAST', 'OCEANIA'}
+
+
+hgdp_merge = pca_hgdp.merge(hgdp_labels,left_on='IID',right_on='sample')
+
+hgdp_regions = sorted(list(set(hgdp_labels.region))) 
+
+
+preimp3_fam = pd.read_csv(wd+'SPARK.27K.genotype.20190501.hg19_preimp3.fam',
+                          delim_whitespace=True,
+                          header=None,
+                          names=['FID','IID','PAT','MAT','SEX','PHEN'])
+
+
+# get reported ancestry labels for spark
+def add_spark_reported_ancestry(df, fam):
+    '''
+    df  : The dataframe to which you wish to append the reported ancestry label
+    fam : The fam file containing all individuals 
+    '''
+    
+    df_child = pd.read_csv(wd+'SPARK_Collection_Version2/bghx_child.csv',sep=',')
+    df_child = df_child.rename(columns={'subject_sp_id':'IID','family_id':'FID'})
+    df_adult = pd.read_csv(wd+'SPARK_Collection_Version2/bghx_adult.csv',sep=',')
+    df_adult = df_adult.rename(columns={'subject_sp_id':'IID','family_id':'FID'})
+
+    anc_ls = ['asian','african_amer','native_amer','native_hawaiian','white','hispanic','other']
+    anc_dict = dict(zip(anc_ls,[None]*len(anc_ls)))
+    
+    assert len(df.IID)==len(set(df.IID)), 'there are individuals with duplicate IIDs, be careful!' # needs to test if we can use IIDs as unique identifiers of individuals
+    
+    #label individuals by ancestry
+    df.loc[df.IID.isin(fam.IID.values),'spark_anc'] = 'unreported'
+    for ancestry in anc_ls:
+        if ancestry != 'hispanic':
+            children_w_ancestry_mother = df_child[(df_child[f'mother_race_{ancestry}']==1)&(df_child.mother_race_more_than_one_calc!=1)&
+                                                  (df_child.mother_hispanic!=1)][['IID','FID']]
+            children_w_ancestry_father = df_child[(df_child[f'father_race_{ancestry}']==1)&(df_child.father_race_more_than_one_calc!=1)&
+                                                  (df_child.father_hispanic!=1)][['IID','FID']]
+            adults_w_ancestry = df_adult[(df_adult[f'race_{ancestry}']==1)&(df_adult.race_more_than_one_calc!=1)&
+                                                  (df_adult.hispanic!=1)]['IID'].values
+        elif ancestry=='hispanic':
+            children_w_ancestry_mother = df_child[(df_child[f'mother_{ancestry}']==1)][['IID','FID']]
+            children_w_ancestry_father = df_child[(df_child[f'father_{ancestry}']==1)][['IID','FID']]
+            adults_w_ancestry = df_adult[(df_adult.hispanic==1)]['IID'].values
+        ancestry_mother_IIDs = set(fam[fam.IID.isin(children_w_ancestry_mother.IID)].MAT.values)
+        ancestry_father_IIDs = set(fam[fam.IID.isin(children_w_ancestry_father.IID)].PAT.values)
+        ancestry_child_IIDs = set(children_w_ancestry_mother).intersection(children_w_ancestry_father)
+        if '0' in ancestry_mother_IIDs:
+            ancestry_mother_IIDs.remove('0')
+        if '0' in ancestry_father_IIDs:
+            ancestry_father_IIDs.remove('0')
+        ancestry_parent_IIDs = ancestry_mother_IIDs.union(ancestry_father_IIDs).union(ancestry_child_IIDs)
+        ancestry_parent_adult_IIDs = ancestry_parent_IIDs.union(adults_w_ancestry)
+        ancestry_all_IIDs = ancestry_parent_adult_IIDs.union(ancestry_child_IIDs)
+        anc_dict[ancestry] = ancestry_all_IIDs
+        df.loc[df.IID.isin(ancestry_all_IIDs),'spark_anc']  = ancestry #annotate df of SPARK parents + 1kg ref (see top section of code)
+    return df
+
+def add_hgdp_ancestry(df):
+    wd = '/Users/nbaya//Documents/lab/genotype-qc/spark/preimp7_imus/'
+    hgdp_labels = pd.read_csv(wd+'hgdp_wgs.20190516.metadata.txt', delim_whitespace=True)
+    hgdp_anc = set(hgdp_labels.region.str.lower()+'.'+hgdp_labels.population.str.lower())
+    hgdp_regions = sorted(list(set(hgdp_labels.region)))
+    df.loc[df.IID.isin(hgdp_labels['sample']),'hgdp_anc'] = 'unreported'
+    for region in hgdp_regions:
+        ids_from_region = hgdp_labels[hgdp_labels.region==region]['sample'].values    
+        df.loc[df.IID.isin(ids_from_region),'hgdp_anc'] = region.lower()
+    return df
+
+pca_hgdp = add_spark_reported_ancestry(pca_hgdp,preimp3_fam)
+pca_hgdp = add_hgdp_ancestry(pca_hgdp)
+
+#spark_anc_ls = sorted(set(pca[~pca.spark_anc.isna()].spark_anc.values))
+spark_anc_ls = ['unreported','white','hispanic','african_amer','asian','other','native_amer','native_hawaiian']
+
+for anc in spark_anc_ls :
+    print(f'   spark {anc}: {len(pca_hgdp[pca_hgdp.spark_anc==anc])}')
+print(f'** spark total: {len(pca_hgdp[~pca_hgdp.spark_anc.isna()])}')
+spark_n_reported = len(pca_hgdp[(~pca_hgdp.spark_anc.isna())&(pca_hgdp.spark_anc!="unreported")])
+print(f'** spark total reported: {spark_n_reported}\n')
+
+hgdp_anc_ls = sorted(set(pca_hgdp[~pca_hgdp.hgdp_anc.isna()].hgdp_anc.values))
+
+for region in hgdp_anc_ls:
+    print(f'   hgdp {region}: {len(pca_hgdp[pca_hgdp.hgdp_anc==region])}')
+print(f'** hgdp_{version} total: {len(pca_hgdp[~pca_hgdp.hgdp_anc.isna()])}')
+hgdp_n_reported = len(pca_hgdp[(~pca_hgdp.hgdp_anc.isna())&(pca_hgdp.hgdp_anc!="unreported")])
+print(f'** hgdp_{version} total reported: {hgdp_n_reported}')
+
+colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+# color by SPARK self-reported ancestry
+reported_spark_anc_ls = [x for x in spark_anc_ls if x is not 'unreported']
+for pcs in [[x,y] for x in range(1,9) for y in range(1,9) if (x-y<0 and x-y>=-1)]:
+    fig,ax=plt.subplots(figsize=(1.5*6,1.5*4))
+    hgdp_tmp = pca_hgdp[~pca_hgdp.hgdp_anc.isna()]
+    plt.plot(hgdp_tmp[f'C{pcs[0]}'],hgdp_tmp[f'C{pcs[1]}'],'x',c='k',ms=5,alpha=0.2)
+    for anc_idx, anc in enumerate(reported_spark_anc_ls):
+        spark_tmp = pca_hgdp[pca_hgdp.spark_anc==anc]
+        plt.plot(spark_tmp[f'C{pcs[0]}'],spark_tmp[f'C{pcs[1]}'],'o',c=colors[anc_idx],alpha=0.5,markeredgecolor='None')
+    legend_elements = ([Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(reported_spark_anc_ls)]+
+                        [Line2D([0],[0],lw=0,markerfacecolor='k',marker='o',label='SPARK',markeredgecolor='w'),
+                         Line2D([0],[0],lw=0,markeredgecolor='k',marker='x',label='ref')])
+    #legend_elements = [Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(ancestry_ls)]
+    ax.legend(handles =legend_elements)    
+    minPCx = pca_hgdp[f'C{pcs[0]}'].min()
+    maxPCx = pca_hgdp[f'C{pcs[0]}'].max()
+    rangePCx = maxPCx-minPCx
+    minPCy = pca_hgdp[f'C{pcs[1]}'].min()
+    maxPCy = pca_hgdp[f'C{pcs[1]}'].max()
+    rangePCy = maxPCy-minPCy
+    plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
+    plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n({spark_n_reported} SPARK + '
+    title_str += f'{hgdp_n_reported} HGDP, {spark_n_reported+hgdp_n_reported} total)'
+    plt.title(title_str)
+    plt.xlabel(f'PC{pcs[0]}')
+    plt.ylabel(f'PC{pcs[1]}')
+    plt.savefig(preimp7_wd+f'spark_preimp7.founders.imus.hgdp{version}.pc{pcs[0]}_pc{pcs[1]}.png',dpi=600)
+
+# Color by SPARK vs. HGDP
+for pcs in [[x,y] for x in range(1,9) for y in range(1,9) if (x-y<0 and x-y>=-1)]:
+    fig,ax=plt.subplots(figsize=(1.5*6,1.5*4))
+    spark_tmp = pca_hgdp[~pca_hgdp.spark_anc.isna()]
+    plt.plot(spark_tmp[f'C{pcs[0]}'],spark_tmp[f'C{pcs[1]}'],'o',alpha=0.5,markeredgecolor='None')
+    hgdp_tmp = pca_hgdp[~pca_hgdp.hgdp_anc.isna()]
+    plt.plot(hgdp_tmp[f'C{pcs[0]}'],hgdp_tmp[f'C{pcs[1]}'],'o',alpha=0.5,markeredgecolor='None')
+    ax.legend(['SPARK','HGDP'])    
+    minPCx = pca_hgdp[f'C{pcs[0]}'].min()
+    maxPCx = pca_hgdp[f'C{pcs[0]}'].max()
+    rangePCx = maxPCx-minPCx
+    minPCy = pca_hgdp[f'C{pcs[1]}'].min()
+    maxPCy = pca_hgdp[f'C{pcs[1]}'].max()
+    rangePCy = maxPCy-minPCy
+    plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
+    plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n({len(spark_tmp)} SPARK + '
+    title_str += f'{len(hgdp_tmp)} HGDP, {len(spark_tmp)+len(hgdp_tmp)} total)'
+    plt.title(title_str)
+    plt.xlabel(f'PC{pcs[0]}')
+    plt.ylabel(f'PC{pcs[1]}')
+    plt.savefig(preimp7_wd+f'spark_preimp7.founders.imus.spark_vs_hgdp{version}.pc{pcs[0]}_pc{pcs[1]}.png',dpi=600)
+    
+
+# Color by HGDP ancestry
+for pcs in [[x,y] for x in range(1,9) for y in range(1,9) if (x-y<0 and x-y>=-1)]:
+    fig,ax=plt.subplots(figsize=(1.5*6,1.5*4))
+    spark_tmp = pca_hgdp[~pca_hgdp.spark_anc.isna()]
+    plt.plot(spark_tmp[f'C{pcs[0]}'],spark_tmp[f'C{pcs[1]}'],'x',alpha=0.1,markeredgecolor='k')
+    for anc_idx, anc in enumerate(hgdp_anc_ls):
+        hgdp_tmp = pca_hgdp[pca_hgdp.hgdp_anc==anc]
+        plt.plot(hgdp_tmp[f'C{pcs[0]}'],hgdp_tmp[f'C{pcs[1]}'],'o',c=colors[anc_idx],alpha=0.5,markeredgecolor='None')
+    legend_elements = ([Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(hgdp_anc_ls)]+
+                        [Line2D([0],[0],lw=0,markerfacecolor='k',marker='x',label='SPARK',markeredgecolor='k'),
+                         Line2D([0],[0],lw=0,color='k',marker='o',label='ref')])
+    #legend_elements = [Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(ancestry_ls)]
+    ax.legend(handles =legend_elements)
+    minPCx = pca_hgdp[f'C{pcs[0]}'].min()
+    maxPCx = pca_hgdp[f'C{pcs[0]}'].max()
+    rangePCx = maxPCx-minPCx
+    minPCy = pca_hgdp[f'C{pcs[1]}'].min()
+    maxPCy = pca_hgdp[f'C{pcs[1]}'].max()
+    rangePCy = maxPCy-minPCy
+    plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
+    plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n({len(spark_tmp)} SPARK + '
+    title_str += f'{hgdp_n_reported} HGDP, {len(spark_tmp)+hgdp_n_reported} total)'
+    plt.title(title_str)
+    plt.xlabel(f'PC{pcs[0]}')
+    plt.ylabel(f'PC{pcs[1]}')
+    plt.savefig(preimp7_wd+f'spark_preimp7.founders.imus.hgdp{version}_anc.pc{pcs[0]}_pc{pcs[1]}.png',dpi=600)
+    
+
+    
+    
+# try to generalize ancestry in order to plot reference and target ancestries together
+generalized_anc_ls = ['africa','america','asia','europe','oceania','other']
+#generalized_anc_dict = {'central_south_asia':'asia','east_asia':'asia','middle_east':'other',
+#                        'white':'europe','hispanic':'other','native_amer':'america',
+#                        'native_hawaiian':'oceania'}
+alt_anc_dict = {'africa':['african_amer'],
+                'america':['native_amer'],
+                'asia':['central_south_asia','east_asia','asian'],
+                'europe':['white'],
+                'oceania':['native_hawaiian'],
+                'other':['hispanic','middle_east']}
+
+# filter to single ancestry
+spark_anc = 'white'
+hgdp_region = 'middle_east'
+
+anc_df = pca_hgdp[pca_hgdp.FID.str.lower().str.contains(hgdp_region.lower().replace('_',''))|(pca_hgdp.spark_anc==spark_anc)] #african ancestry
+anc_subpops = sorted(set(hgdp_labels[hgdp_labels.region==hgdp_region.upper()].population))
+
+for pcs in [[x,y] for x in range(1,6) for y in range(1,6) if (x-y<0 and x-y>=-1)]:
+    fig,ax=plt.subplots(figsize=(1.5*6,1.5*4))
+    anc_df_spark_tmp = anc_df[~anc_df.spark_anc.isna()]
+    plt.plot(anc_df_spark_tmp[f'C{pcs[0]}'],anc_df_spark_tmp[f'C{pcs[1]}'],'x',alpha=0.1,markeredgecolor='k')
+    for subpop_idx, subpop in enumerate(anc_subpops):
+        subpop_tmp = anc_df[anc_df.FID.str.contains(subpop)]
+        plt.plot(subpop_tmp[f'C{pcs[0]}'],subpop_tmp[f'C{pcs[1]}'], 
+                 marker='o' if subpop_idx<10 else '*',
+                 linestyle='',
+                 c=colors[subpop_idx%10],
+                 alpha=0.5,
+                 markeredgecolor='None',
+                 ms=5 if subpop_idx<10 else 10)
+    legend_elements = ([Patch(facecolor=colors[subpop_idx%10],label=subpop) for subpop_idx, subpop in enumerate(anc_subpops)]+
+                        [Line2D([0],[0],lw=0,markerfacecolor='k',marker='x',label='SPARK',markeredgecolor='k'),
+                         Line2D([0],[0],lw=0,color='k',marker='o',label='ref')])
+    ax.legend(handles =legend_elements,
+              prop={'size':8})
+#    minPCx = pca_hgdp[f'C{pcs[0]}'].min()
+#    maxPCx = pca_hgdp[f'C{pcs[0]}'].max()
+#    rangePCx = maxPCx-minPCx
+#    minPCy = pca_hgdp[f'C{pcs[1]}'].min()
+#    maxPCy = pca_hgdp[f'C{pcs[1]}'].max()
+#    rangePCy = maxPCy-minPCy
+#    plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
+#    plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n({spark_anc.capitalize()} ancestry subset: {len(anc_df_spark_tmp)} SPARK + '
+    title_str += f'{len(anc_df[anc_df.spark_anc.isna()])} HGDP, {len(anc_df)} total)'
+    plt.title(title_str)
+    plt.xlabel(f'PC{pcs[0]}')
+    plt.ylabel(f'PC{pcs[1]}')
+    plt.savefig(preimp7_wd+f'spark_preimp7.founders.imus.hgdp{version}.{spark_anc}.{hgdp_region}.pc{pcs[0]}_pc{pcs[1]}.png',dpi=600)
+
+
+
+
+# get white individuals in SPARK dataset
+pca_hgdp[pca_hgdp.spark_anc=='white'][['FID','IID']].to_csv(
+        preimp7_wd+f'spark_preimp7.founders.imus.postpca.white.txt',
+        sep='\t',
+        header=None,
+        index=False)
+
+# get European samples in HGDP
+pca_hgdp[pca_hgdp.hgdp_anc=='europe'][['FID','IID']].to_csv(
+        preimp7_wd+f'hgdp.postpca.european.txt',
+        sep='\t',
+        header=None,
+        index=False)
+
+# check allele frequencies for white/european samples
+spark_af = pd.read_csv(preimp7_wd+'spark_preimp7.founders.imus.postpca.white.frq',
+                       delim_whitespace=True)
+
+hgdp_af = pd.read_csv(preimp7_wd+'spark_preimp7.founders.imus.postpca.european.frq',
+                      delim_whitespace=True)
+
+merge_af = hgdp_af.merge(spark_af,on=['SNP','CHR'],suffixes=('_hgdp','_spark'))
+# align SPARK's alleles to hgdp minor allele ("A1")
+merge_af.loc[merge_af.A1_hgdp==merge_af.A1_spark,'hgdpA1_sparkAF']=merge_af['MAF_spark']
+merge_af.loc[merge_af.A1_hgdp!=merge_af.A1_spark,'hgdpA1_sparkAF']=1-merge_af['MAF_spark']
+
+plt.plot(merge_af.MAF_hgdp,merge_af.hgdpA1_sparkAF,'.',ms=5,alpha=0.5)
+
+# randomly choose A1:
+flip_hgdp_A1 = np.random.randint(low=0,high=2,size=len(merge_af))==1
+merge_af.loc[~flip_hgdp_A1,'A1_random'] = merge_af.loc[~flip_hgdp_A1,'A1_hgdp']
+merge_af.loc[flip_hgdp_A1,'A1_random'] = merge_af.loc[flip_hgdp_A1,'A2_hgdp']
+
+merge_af.loc[merge_af.A1_hgdp==merge_af.A1_random,'A1F_random_hgdp'] = merge_af.loc[merge_af.A1_hgdp==merge_af.A1_random,'MAF_hgdp']
+merge_af.loc[merge_af.A1_hgdp!=merge_af.A1_random,'A1F_random_hgdp'] = 1-merge_af.loc[merge_af.A1_hgdp!=merge_af.A1_random,'MAF_hgdp']
+
+merge_af.loc[merge_af.A1_spark==merge_af.A1_random,'A1F_random_spark'] = merge_af.loc[merge_af.A1_spark==merge_af.A1_random,'MAF_spark']
+merge_af.loc[merge_af.A1_spark!=merge_af.A1_random,'A1F_random_spark'] = 1-merge_af.loc[merge_af.A1_spark!=merge_af.A1_random,'MAF_spark']
+
+plt.plot(merge_af.A1F_random_hgdp,merge_af.A1F_random_spark,'.',ms=5,alpha=0.5)
+#merge_af_tmp = merge_af[abs(merge_af.A1F_random_hgdp-merge_af.A1F_random_spark)>0.2]
+#plt.plot(merge_af_tmp.A1F_random_hgdp,merge_af_tmp.A1F_random_spark,'r.',ms=5,alpha=1)
+plt.xlabel('HGDP European AF')
+plt.ylabel('SPARK white AF')
+plt.plot([0,1],[0,1],'k--',alpha=0.5)
+plt.plot([0.2,1],[0,0.8],'k:',alpha=0.5)
+plt.plot([0,0.8],[0.2,1],'k:',alpha=0.5)
+plt.title('Allele frequencies for white/European samples')
+plt.savefig(preimp7_wd+'spark_white.hgdp_euoropean.af.png',dpi=300)
+
+# get outlier SNPs
+outliers = merge_af[abs(merge_af.A1F_random_hgdp-merge_af.A1F_random_spark)>0.2]['SNP']
+outliers.to_csv(preimp7_wd+'spark_hgdp.AFdiff.snps',sep='\t',header=None,index=False)
+
+# check if outlier SNPs are loading on certain PCs
+for c in range(1,11):
+    qa = pd.read_csv(preimp7_wd+f'preimp7.founders.imus.hgdp_v2.menv.assomds.C{c}.qassoc',delim_whitespace=True)
+    field = 'P'
+    nonoutlier_metric = qa.loc[~qa.SNP.isin(outliers),field].abs().mean()
+    outlier_metric = qa.loc[qa.SNP.isin(outliers),field].abs().mean()
+    print(f'PC{c}\nnon-outlier {field} mean: {round(nonoutlier_metric,4)}\noutlier {field} mean: {round(outlier_metric,4)}\n')
+    fig,ax=plt.subplots(figsize=(6,4))
+    ax.plot(-np.log10(qa.loc[~qa.SNP.isin(outliers)].P),'.',ms=2)
+    ax.plot(-np.log10(qa.loc[qa.SNP.isin(outliers)].P),'r.',ms=5)
+    ax.plot([0,len(qa.index)],[-np.log10(5e-8)]*2,'k--',alpha=0.9)
+    plt.title(f'PC {c}')
+    plt.ylabel('-log10(P)')
+    plt.savefig(preimp7_wd+f'pc{c}_gwas.png',dpi=300)
+    
+# get outlier individuals
+def add_spark_reported_ancestries(df, fam):
+    '''
+    NOTE: This is different from add_spark_reported_ancestries() because it adds
+          ALL ancestries reported by SPARK, allowing for a single person to have
+          multple ancestries.
+    df  : The dataframe to which you wish to append the reported ancestry labels
+    fam : The fam file containing all individuals 
+    '''
+    
+    df_child = pd.read_csv(wd+'SPARK_Collection_Version2/bghx_child.csv',sep=',')
+    df_child = df_child.rename(columns={'subject_sp_id':'IID','family_id':'FID'})
+    df_adult = pd.read_csv(wd+'SPARK_Collection_Version2/bghx_adult.csv',sep=',')
+    df_adult = df_adult.rename(columns={'subject_sp_id':'IID','family_id':'FID'})
+
+    anc_ls = ['asian','african_amer','native_amer','native_hawaiian','white','hispanic','other']
+    anc_dict = dict(zip(anc_ls,[None]*len(anc_ls)))
+    
+    assert len(df.IID)==len(set(df.IID)), 'there are individuals with duplicate IIDs, be careful!' # needs to test if we can use IIDs as unique identifiers of individuals
+    
+    #label individuals by ancestry
+    for ancestry in anc_ls:
+#        df[ancestry] = False
+        if ancestry != 'hispanic':
+            children_w_ancestry_mother = df_child[(df_child[f'mother_race_{ancestry}']==1)&(df_child.mother_hispanic!=1)][['IID','FID']]
+            children_w_ancestry_father = df_child[(df_child[f'father_race_{ancestry}']==1)&(df_child.father_hispanic!=1)][['IID','FID']]
+            adults_w_ancestry = df_adult[(df_adult[f'race_{ancestry}']==1)&(df_adult.hispanic!=1)]['IID'].values
+        elif ancestry=='hispanic':
+            children_w_ancestry_mother = df_child[(df_child[f'mother_{ancestry}']==1)][['IID','FID']]
+            children_w_ancestry_father = df_child[(df_child[f'father_{ancestry}']==1)][['IID','FID']]
+            adults_w_ancestry = df_adult[(df_adult.hispanic==1)]['IID'].values
+        ancestry_mother_IIDs = set(fam[fam.IID.isin(children_w_ancestry_mother.IID)].MAT.values)
+        ancestry_father_IIDs = set(fam[fam.IID.isin(children_w_ancestry_father.IID)].PAT.values)
+        if '0' in ancestry_mother_IIDs:
+            ancestry_mother_IIDs.remove('0')
+        if '0' in ancestry_father_IIDs:
+            ancestry_father_IIDs.remove('0')
+        ancestry_parent_IIDs = ancestry_mother_IIDs.union(ancestry_father_IIDs)
+        ancestry_parents_adults_IIDs = ancestry_parent_IIDs.union(adults_w_ancestry)
+        anc_dict[ancestry] = ancestry_parents_adults_IIDs
+        df.loc[df.IID.isin(ancestry_parents_adults_IIDs), ancestry]  = True #annotate df of SPARK parents + 1kg ref (see top section of code)
+    return df
+
+spark_tmp0 = pca_hgdp[~pca_hgdp.spark_anc.isna()].copy()
+hgdp_tmp = pca_hgdp[~pca_hgdp.hgdp_anc.isna()].copy()
+
+spark_tmp = add_spark_reported_ancestries(spark_tmp0, preimp3_fam)
+
+anc_ls = ['asian','african_amer','native_amer','native_hawaiian','white','hispanic','other']
+
+spark_tmp0['n_ancestries'] = spark_tmp0[anc_ls].sum(axis=1)
+
+
+pc = 8
+
+min_hgdp = hgdp_tmp[f'C{pc}'].min()
+max_hgdp = hgdp_tmp[f'C{pc}'].max()
+print(f'\nNumber of outliers with PC{pc} < {min_hgdp}: {len(spark_tmp0[(spark_tmp0[f"C{pc}"]<min_hgdp)])}')
+print(f'Number of outliers with PC{pc} > {max_hgdp}: {len(spark_tmp0[(spark_tmp0[f"C{pc}"]>max_hgdp)])}')
+print('NOTE: Includes all SPARK individuals in founder IMUS, not just those with reported ancestry')
+
+spark_tmp = spark_tmp0[spark_tmp['n_ancestries']>0]
+spark_outliers = spark_tmp[(spark_tmp[f'C{pc}']<min_hgdp)|(spark_tmp[f'C{pc}']>max_hgdp)].copy()
+print(f'Number of outliers with PC{pc} < {min_hgdp}: {len(spark_tmp[(spark_tmp[f"C{pc}"]<min_hgdp)])}')
+print(f'Number of outliers with PC{pc} > {max_hgdp}: {len(spark_tmp[(spark_tmp[f"C{pc}"]>max_hgdp)])}')
+print(f'Total number of outliers with PC{pc} < {min_hgdp} or PC{pc} > {max_hgdp}: {len(spark_outliers)}')
+print('NOTE: Only using individuals with reported ancestry')
+
+
+for ancestry in anc_ls:
+    spark_outliers[ancestry+'_frac'] = spark_outliers[ancestry]/spark_outliers['n_ancestries']
+
+spark_outliers[['IID']+[ancestry+'_frac' for ancestry in anc_ls]]
+
+
+
+# use PC range of certain HGDP ancestry
+hgdp_anc= 'east_asia'
+if pc==8:
+    min_hgdp_anc = hgdp_tmp[hgdp_tmp.hgdp_anc==hgdp_anc][f'C{pc}'].min()
+    max_hgdp_anc = hgdp_tmp[hgdp_tmp.hgdp_anc==hgdp_anc][f'C{pc}'].max()    
+    spark_outliers = spark_tmp[(spark_tmp[f'C{pc}']<min_hgdp_anc)|(spark_tmp[f'C{pc}']>max_hgdp_anc)].copy()
+    print(f'Number of outliers with PC{pc} < {min_hgdp}: {len(spark_tmp[(spark_tmp[f"C{pc}"]<min_hgdp)])}')
+    print(f'Number of outliers with PC{pc} > {max_hgdp}: {len(spark_tmp[(spark_tmp[f"C{pc}"]>max_hgdp)])}')
+    print(f'Total number of outliers with PC{pc} < {min_hgdp} or PC{pc} > {max_hgdp}: {len(spark_outliers)}')
+    print(f'NOTE: Only using individuals with reported ancestry.\n      Using PC range defined by HGDP ancestry "{hgdp_anc}"')
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##  Create plots for 1kg
+
+pca_1kg = pd.read_csv(preimp7_wd+'preimp7.founders.imus.1kg.menv.mds', delim_whitespace=True)
+
+
+def add_1kg_ancestry(df):
+    df['1kg_anc'] = df['FID'].str.split('_',expand=True)[3]
+    df.loc[df['1kg_anc']=='mix','1kg_anc'] = float('NaN')
+    return df
+
+pca_1kg = add_spark_reported_ancestry(pca_1kg,preimp3_fam)
+pca_1kg = add_1kg_ancestry(pca_1kg)
+
+spark_anc_ls = ['unreported','white','hispanic','african_amer','asian','other','native_amer','native_hawaiian']
+
+for anc in spark_anc_ls :
+    print(f'   spark {anc}: {len(pca_1kg[pca_1kg.spark_anc==anc])}')
+print(f'** spark total: {len(pca_1kg[~pca_1kg.spark_anc.isna()])}')
+spark_n_reported = len(pca_1kg[(~pca_1kg.spark_anc.isna())&(pca_1kg.spark_anc!="unreported")])
+print(f'** spark total reported: {spark_n_reported}\n')
+
+kg_anc_ls = sorted(set(pca_1kg.loc[~pca_1kg['1kg_anc'].isna(),'1kg_anc'].values))
+
+for region in kg_anc_ls:
+    print(f'   1kg {region}: {len(pca_1kg[pca_1kg["1kg_anc"]==region])}')
+print(f'** 1kg total: {len(pca_1kg[~pca_1kg["1kg_anc"].isna()])}')
+kg_n_reported = len(pca_1kg[(~pca_1kg["1kg_anc"].isna())&(pca_1kg["1kg_anc"]!="unreported")])
+print(f'** 1kg total reported: {kg_n_reported}')
+
+
+reported_spark_anc_ls = [x for x in spark_anc_ls if x is not 'unreported']
+for pcs in [[x,y] for x in range(1,7) for y in range(1,7) if (x-y<0 and x-y>=-1)]:
+    fig,ax=plt.subplots(figsize=(1.5*6,1.5*4))
+    tmp_1kg= pca_1kg[~pca_1kg["1kg_anc"].isna()]
+    plt.plot(tmp_1kg[f'C{pcs[0]}'],tmp_1kg[f'C{pcs[1]}'],'x',c='k',ms=5,alpha=0.2)
+    for anc_idx, anc in enumerate(reported_spark_anc_ls):
+        spark_tmp = pca_1kg[pca_1kg.spark_anc==anc]
+        plt.plot(spark_tmp[f'C{pcs[0]}'],spark_tmp[f'C{pcs[1]}'],'o',c=colors[anc_idx],alpha=0.5,markeredgecolor='None')
+    legend_elements = ([Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(reported_spark_anc_ls)]+
+                        [Line2D([0],[0],lw=0,markerfacecolor='k',marker='o',label='SPARK',markeredgecolor='w'),
+                         Line2D([0],[0],lw=0,markeredgecolor='k',marker='x',label='ref')])
+    #legend_elements = [Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(ancestry_ls)]
+    ax.legend(handles =legend_elements)    
+    minPCx = pca_1kg[f'C{pcs[0]}'].min()
+    maxPCx = pca_1kg[f'C{pcs[0]}'].max()
+    rangePCx = maxPCx-minPCx
+    minPCy = pca_1kg[f'C{pcs[1]}'].min()
+    maxPCy = pca_1kg[f'C{pcs[1]}'].max()
+    rangePCy = maxPCy-minPCy
+    plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
+    plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n({spark_n_reported} SPARK + '
+    title_str += f'{kg_n_reported} 1KG, {spark_n_reported+kg_n_reported} total)'
+    plt.title(title_str)
+    plt.xlabel(f'PC{pcs[0]}')
+    plt.ylabel(f'PC{pcs[1]}')
+    plt.savefig(preimp7_wd+f'spark_preimp7.founders.imus.1kg.pc{pcs[0]}_pc{pcs[1]}.png',dpi=600)
+    
+# color by spark vs. 1kg
+for pcs in [[x,y] for x in range(1,7) for y in range(1,7) if (x-y<0 and x-y>=-1)]:
+    fig,ax=plt.subplots(figsize=(1.5*6,1.5*4))
+    spark_tmp = pca_1kg[~pca_1kg.spark_anc.isna()]
+    plt.plot(spark_tmp[f'C{pcs[0]}'],spark_tmp[f'C{pcs[1]}'],'o',alpha=0.5,markeredgecolor='None')
+    tmp_1kg= pca_1kg[~pca_1kg["1kg_anc"].isna()]
+    plt.plot(tmp_1kg[f'C{pcs[0]}'],tmp_1kg[f'C{pcs[1]}'],'o',alpha=0.5,markeredgecolor='None')
+    ax.legend(['SPARK','1KG'])    
+    minPCx = pca_1kg[f'C{pcs[0]}'].min()
+    maxPCx = pca_1kg[f'C{pcs[0]}'].max()
+    rangePCx = maxPCx-minPCx
+    minPCy = pca_1kg[f'C{pcs[1]}'].min()
+    maxPCy = pca_1kg[f'C{pcs[1]}'].max()
+    rangePCy = maxPCy-minPCy
+    plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
+    plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n({spark_n_reported} SPARK + '
+    title_str += f'{kg_n_reported} 1KG, {spark_n_reported+kg_n_reported} total)'
+    plt.title(title_str)
+    plt.xlabel(f'PC{pcs[0]}')
+    plt.ylabel(f'PC{pcs[1]}')
+    plt.savefig(preimp7_wd+f'spark_preimp7.founders.imus.spark_vs_1kg.pc{pcs[0]}_pc{pcs[1]}.png',dpi=600)
+
+
+
+# check HGDP qassoc files, extract all significant hits
+sig_snps = []
+for c in range(1,21):
+    qa = pd.read_csv(preimp7_wd+f'preimp7.founders.imus.hgdp_v2.menv.assomds.C{c}.qassoc',delim_whitespace=True)
+    pval_thresh = 5e-8    
+    sig_snps += qa[qa.P<pval_thresh].SNP.values.tolist() #extract all significant hits
+    
+np.savetxt(fname=preimp7_wd+'preimp7.founders.imus.hgdp_v2.menv.assomds.sig_snps.qassoc', X=sig_snps,fmt='%s')
+
+
+
+
+
+# Check PCA results on all SPARK samples
+#pca_spark = pd.read_csv(preimp7_wd+'spark.all.admixture_tmp1.scores.tsv.bgz',sep='\t',compression='gzip')
+pca_spark = pd.read_csv(preimp7_wd+'spark.all.admixture_tmp1.scores.v2.tsv.bgz',sep='\t',compression='gzip')
+pca_spark = pca_spark.rename(columns={'s':'IID','fam_id':'FID','pat_id':'PAT','mat_id':'MAT'})
+
+pca_spark = add_spark_reported_ancestry(pca_spark, preimp3_fam)
+
+# color by SPARK self-reported ancestry
+spark_anc_ls = ['unreported','white','hispanic','african_amer','asian','other','native_amer','native_hawaiian']
+reported_spark_anc_ls = [x for x in spark_anc_ls if x is not 'unreported']
+for pcs in [[x,y] for x in range(1,10) for y in range(1,10) if (x-y<0 and x-y>=-1)]:
+    fig,ax=plt.subplots(figsize=(1.5*6,1.5*4))
+    spark_tmp = pca_spark[pca_spark.spark_anc=='unreported']
+    ax.plot(spark_tmp[f'pc{pcs[0]}'],spark_tmp[f'pc{pcs[1]}'],'o',c='grey',alpha=0.5,markeredgecolor='None')
+    for anc_idx, anc in enumerate(reported_spark_anc_ls):
+        spark_tmp = pca_spark[pca_spark.spark_anc==anc]
+        ax.plot(spark_tmp[f'pc{pcs[0]}'],spark_tmp[f'pc{pcs[1]}'],'o',c=colors[anc_idx],alpha=0.5,markeredgecolor='None')
+    legend_elements = ([Patch(facecolor='k',label='unknown',alpha=0.5)]+
+                       [Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(reported_spark_anc_ls)])
+    #legend_elements = [Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(ancestry_ls)]
+    ax.legend(handles =legend_elements)    
+    minPCx = pca_spark[f'pc{pcs[0]}'].min()
+    maxPCx = pca_spark[f'pc{pcs[0]}'].max()
+    rangePCx = maxPCx-minPCx
+    minPCy = pca_spark[f'pc{pcs[1]}'].min()
+    maxPCy = pca_spark[f'pc{pcs[1]}'].max()
+    rangePCy = maxPCy-minPCy
+    plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
+    plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n(SPARK with reported ancestry: {len(pca_spark[pca_spark.spark_anc!="unreported"])}, SPARK total: {len(pca_spark)})'
+    plt.title(title_str)
+    plt.xlabel(f'PC{pcs[0]}')
+    plt.ylabel(f'PC{pcs[1]}')
+    plt.savefig(preimp7_wd+f'spark.all.projected.pc{pcs[0]}_pc{pcs[1]}.png',dpi=300)
+
+
+# plot only nonfounders with reported ancestry
+spark_anc_ls = ['unreported','white','hispanic','african_amer','asian','other','native_amer','native_hawaiian']
+reported_spark_anc_ls = [x for x in spark_anc_ls if x is not 'unreported']
+nonfounders = pca_spark[(~pca_spark.PAT.isna())|(~pca_spark.MAT.isna())]
+pca_spark_tmp = nonfounders
+for pcs in [[x,y] for x in range(1,6) for y in range(1,6) if (x-y<0 and x-y>=-1)]:
+    fig,ax=plt.subplots(figsize=(1.5*6,1.5*4))
+    spark_tmp = pca_spark_tmp[pca_spark_tmp.spark_anc=='unreported']
+    ax.plot(spark_tmp[f'pc{pcs[0]}'],spark_tmp[f'pc{pcs[1]}'],'o',c='grey',alpha=0.2,markeredgecolor='None')
+    for anc_idx, anc in enumerate(reported_spark_anc_ls):
+        spark_tmp = pca_spark_tmp[pca_spark_tmp.spark_anc==anc]
+        ax.plot(spark_tmp[f'pc{pcs[0]}'],spark_tmp[f'pc{pcs[1]}'],'o',c=colors[anc_idx],alpha=0.5,markeredgecolor='None')
+#    legend_elements = ([Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(spark_anc_ls)])
+    legend_elements = ([Patch(facecolor='k',label='unknown',alpha=0.5)]+
+                       [Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(reported_spark_anc_ls)])
+    #legend_elements = [Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(ancestry_ls)]
+    ax.legend(handles =legend_elements)    
+    minPCx = pca_spark_tmp[f'pc{pcs[0]}'].min()
+    maxPCx = pca_spark_tmp[f'pc{pcs[0]}'].max()
+    rangePCx = maxPCx-minPCx
+    minPCy = pca_spark_tmp[f'pc{pcs[1]}'].min()
+    maxPCy = pca_spark_tmp[f'pc{pcs[1]}'].max()
+    rangePCy = maxPCy-minPCy
+    plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
+    plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n(SPARK non-founders: {len(pca_spark_tmp)}, SPARK non-founders w/ reported ancestry: {len(pca_spark_tmp[pca_spark_tmp.spark_anc!="unreported"])})'
+    plt.title(title_str)
+    plt.xlabel(f'PC{pcs[0]}')
+    plt.ylabel(f'PC{pcs[1]}')
+    plt.savefig(preimp7_wd+f'spark.nonfounders.projected.pc{pcs[0]}_pc{pcs[1]}.png',dpi=300)
+
+    
+
+    
+# plot only founders IMUS, reprojected
+spark_founders = pca_hgdp[~pca_hgdp.spark_anc.isna()][['FID','IID']]
+pca_founders_imus  = pca_spark[pca_spark.IID.isin(spark_founders.IID)]
+pca_spark_tmp = pca_founders_imus
+for pcs in [[x,y] for x in range(1,5) for y in range(1,5) if (x-y<0 and x-y>=-1)]:
+    fig,ax=plt.subplots(figsize=(1.5*6,1.5*4))
+    for anc_idx, anc in enumerate(reported_spark_anc_ls):
+        spark_tmp = pca_spark_tmp[pca_spark_tmp.spark_anc==anc]
+        ax.plot(spark_tmp[f'pc{pcs[0]}'],spark_tmp[f'pc{pcs[1]}'],'o',c=colors[anc_idx],alpha=0.5,markeredgecolor='None')
+    legend_elements = ([Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(reported_spark_anc_ls)])
+    #legend_elements = [Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(ancestry_ls)]
+    ax.legend(handles =legend_elements)    
+    minPCx = pca_spark_tmp[f'pc{pcs[0]}'].min()
+    maxPCx = pca_spark_tmp[f'pc{pcs[0]}'].max()
+    rangePCx = maxPCx-minPCx
+    minPCy = pca_spark_tmp[f'pc{pcs[1]}'].min()
+    maxPCy = pca_spark_tmp[f'pc{pcs[1]}'].max()
+    rangePCy = maxPCy-minPCy
+    plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
+    plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n({len(pca_spark_tmp[(pca_spark_tmp.spark_anc!="unreported")&~(pca_spark_tmp.spark_anc.isna())])} SPARK founders w/ reported ancestry)'
+    plt.title(title_str)
+    plt.xlabel(f'PC{pcs[0]}')
+    plt.ylabel(f'PC{pcs[1]}')
+    plt.savefig(preimp7_wd+f'spark.founders.projected.pc{pcs[0]}_pc{pcs[1]}.png',dpi=300)
+
+
+# color by founders used for pca vs. projected non-founders
+spark_founders_imus = pca_hgdp[~pca_hgdp.spark_anc.isna()][['FID','IID']]
+pca_founders_imus = pca_spark[pca_spark.IID.isin(spark_founders_imus.IID)]
+#non_pca_founders_imus = pca_spark[~pca_spark.IID.isin(spark_founders_imus.IID)] #everyone else in SPARK not included in the founders IMUS used for PCA
+nonfounders = pca_spark[(~pca_spark.PAT.isna())|(~pca_spark.MAT.isna())]
+for pcs in [[x,y] for x in range(1,5) for y in range(1,5) if (x-y<0 and x-y>=-1)]:
+    fig,ax=plt.subplots(figsize=(1.5*6,1.5*4))
+    ax.plot(pca_founders_imus[f'pc{pcs[0]}'],pca_founders_imus[f'pc{pcs[1]}'],'o',alpha=0.25,markeredgecolor='None')
+    ax.plot(nonfounders[f'pc{pcs[0]}'],nonfounders[f'pc{pcs[1]}'],'o',alpha=0.25,markeredgecolor='None')
+    ax.legend(['Founders IMUS used for PCA','Non-founders'])
+    minPCx = pca_spark_tmp[f'pc{pcs[0]}'].min()
+    maxPCx = pca_spark_tmp[f'pc{pcs[0]}'].max()
+    rangePCx = maxPCx-minPCx
+    minPCy = pca_spark_tmp[f'pc{pcs[1]}'].min()
+    maxPCy = pca_spark_tmp[f'pc{pcs[1]}'].max()
+    rangePCy = maxPCy-minPCy
+    plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
+    plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n(PCA founders IMUS: {len(pca_founders_imus)}, Non-founders: {len(nonfounders)})'
+    plt.title(title_str)
+    plt.xlabel(f'PC{pcs[0]}')
+    plt.ylabel(f'PC{pcs[1]}')
+    plt.savefig(preimp7_wd+f'spark.pcafoundersimus_vs_nonfounders.projected.pc{pcs[0]}_pc{pcs[1]}.png',dpi=300)
+
+
+
+
+# check ADMIXTURE results from founders + HGDP reference
+k=7
+
+admix0 = pd.read_csv(preimp7_wd+f'spark.hgdp.admixture_tmp2.{k}.Q',
+                   delim_whitespace=True,
+                   names=[f'pop{x}' for x in range(k)])
+admix_fam = pd.read_csv(preimp7_wd+f'spark.hgdp.admixture_tmp2.fam',
+                   delim_whitespace=True,
+                   names=['FID','IID','PAT','MAT','SEX','PHEN'])
+admix1 = pd.concat([admix_fam,admix0],axis=1)
+
+#remove duplicate IIDs
+admix2 = admix1.loc[~admix1.FID.str.contains('preimp7'),:]
+#admix2 = admix1.drop_duplicates(subset='IID',keep='last')
+
+#print(f'number of HGDP individuals: {admix2.FID.str.contains('HGDP').sum()}') # number of HGDP individuals
+
+
+admix3 = add_spark_reported_ancestry(df=admix2, 
+                                    fam=preimp3_fam)
+admix = add_hgdp_ancestry(df=admix3)
+
+# check which pop corresponds to which population
+#admix[admix.hgdp_anc=='africa'][[f'pop{x}' for x in range(k)]]
+spark_anc_ls = ['unreported','white','hispanic','african_amer','asian','other','native_amer','native_hawaiian']
+
+for spark_anc in spark_anc_ls:
+    print(f'\n** {spark_anc} **\n{admix[admix.spark_anc==spark_anc][[f"pop{x}" for x in range(k)]].mean()}\nn = {admix[admix.spark_anc==spark_anc].shape[0]}')
+print('\n==================================\n') # formatting to separate two print statements
+hgdp_anc_ls = ['africa', 'america', 'central_south_asia', 'east_asia', 'europe', 'middle_east', 'oceania']
+
+for hgdp_anc in hgdp_anc_ls:
+    print(f'\n** {hgdp_anc} **\n{admix[admix.hgdp_anc==hgdp_anc][[f"pop{x}" for x in range(k)]].mean()}\nn = {admix[admix.hgdp_anc==hgdp_anc].shape[0]}')
