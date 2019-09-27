@@ -652,6 +652,8 @@ if version== 'v3':
     
 hgdp_labels = pd.read_csv(preimp7_wd+'hgdp_wgs.20190516.metadata.txt', delim_whitespace=True)
 
+hgdp_labels
+
 hgdp_labels[['sample','population','region']]
 
 set(hgdp_labels.region) # {'AFRICA','AMERICA', 'CENTRAL_SOUTH_ASIA', 'EAST_ASIA', 'EUROPE', 'MIDDLE_EAST', 'OCEANIA'}
@@ -659,7 +661,7 @@ set(hgdp_labels.region) # {'AFRICA','AMERICA', 'CENTRAL_SOUTH_ASIA', 'EAST_ASIA'
 
 hgdp_merge = pca_hgdp.merge(hgdp_labels,left_on='IID',right_on='sample')
 
-hgdp_regions = sorted(list(set(hgdp_labels.region))) 
+hgdp_regions = sorted(list(set(hgdp_labels.region)))
 
 
 preimp3_fam = pd.read_csv(wd+'SPARK.27K.genotype.20190501.hg19_preimp3.fam',
@@ -677,6 +679,8 @@ def add_spark_reported_ancestry(df, fam):
     
     df_child = pd.read_csv(wd+'SPARK_Collection_Version2/bghx_child.csv',sep=',')
     df_child = df_child.rename(columns={'subject_sp_id':'IID','family_id':'FID'})
+    df_sibling = pd.read_csv(wd+'SPARK_Collection_Version2/bghx_sibling.csv',sep=',')
+    df_sibling = df_sibling.rename(columns={'subject_sp_id':'IID','family_id':'FID'})
     df_adult = pd.read_csv(wd+'SPARK_Collection_Version2/bghx_adult.csv',sep=',')
     df_adult = df_adult.rename(columns={'subject_sp_id':'IID','family_id':'FID'})
 
@@ -690,28 +694,30 @@ def add_spark_reported_ancestry(df, fam):
     for ancestry in anc_ls:
         if ancestry != 'hispanic':
             children_w_ancestry_mother = df_child[(df_child[f'mother_race_{ancestry}']==1)&(df_child.mother_race_more_than_one_calc!=1)&
-                                                  (df_child.mother_hispanic!=1)][['IID','FID']]
+                                                  (df_child.mother_hispanic!=1)].IID.values
             children_w_ancestry_father = df_child[(df_child[f'father_race_{ancestry}']==1)&(df_child.father_race_more_than_one_calc!=1)&
-                                                  (df_child.father_hispanic!=1)][['IID','FID']]
+                                                  (df_child.father_hispanic!=1)].IID.values
             adults_w_ancestry = df_adult[(df_adult[f'race_{ancestry}']==1)&(df_adult.race_more_than_one_calc!=1)&
                                                   (df_adult.hispanic!=1)]['IID'].values
         elif ancestry=='hispanic':
-            children_w_ancestry_mother = df_child[(df_child[f'mother_{ancestry}']==1)][['IID','FID']]
-            children_w_ancestry_father = df_child[(df_child[f'father_{ancestry}']==1)][['IID','FID']]
-            adults_w_ancestry = df_adult[(df_adult.hispanic==1)]['IID'].values
-        ancestry_mother_IIDs = set(fam[fam.IID.isin(children_w_ancestry_mother.IID)].MAT.values)
-        ancestry_father_IIDs = set(fam[fam.IID.isin(children_w_ancestry_father.IID)].PAT.values)
+            children_w_ancestry_mother = df_child[(df_child[f'mother_{ancestry}']==1)].IID.values
+            children_w_ancestry_father = df_child[(df_child[f'father_{ancestry}']==1)].IID.values
+            adults_w_ancestry = df_adult[(df_adult.hispanic==1)].IID.values
+        ancestry_mother_IIDs = set(fam[fam.IID.isin(children_w_ancestry_mother)].MAT.values)
+        ancestry_father_IIDs = set(fam[fam.IID.isin(children_w_ancestry_father)].PAT.values)
         ancestry_child_IIDs = set(children_w_ancestry_mother).intersection(children_w_ancestry_father)
-        if '0' in ancestry_mother_IIDs:
-            ancestry_mother_IIDs.remove('0')
-        if '0' in ancestry_father_IIDs:
-            ancestry_father_IIDs.remove('0')
-        ancestry_parent_IIDs = ancestry_mother_IIDs.union(ancestry_father_IIDs).union(ancestry_child_IIDs)
+        for IIDs in [ancestry_mother_IIDs, ancestry_father_IIDs, ancestry_child_IIDs]:
+             if '0' in IIDs:
+                 IIDs.remove('0')
+        ancestry_sibling_IIDs = fam[(~fam.IID.isin(ancestry_child_IIDs))&(fam.MAT.isin(ancestry_mother_IIDs))&(fam.PAT.isin(ancestry_father_IIDs))].IID.values
+        
+        ancestry_parent_IIDs = ancestry_mother_IIDs.union(ancestry_father_IIDs)
         ancestry_parent_adult_IIDs = ancestry_parent_IIDs.union(adults_w_ancestry)
-        ancestry_all_IIDs = ancestry_parent_adult_IIDs.union(ancestry_child_IIDs)
-        anc_dict[ancestry] = ancestry_all_IIDs
+        ancestry_all_IIDs = ancestry_parent_adult_IIDs.union(ancestry_child_IIDs).union(ancestry_sibling_IIDs)
+        
+        anc_dict[ancestry] = (ancestry_all_IIDs, len(ancestry_all_IIDs))
         df.loc[df.IID.isin(ancestry_all_IIDs),'spark_anc']  = ancestry #annotate df of SPARK parents + 1kg ref (see top section of code)
-    return df
+    return df, anc_dict
 
 def add_hgdp_ancestry(df):
     wd = '/Users/nbaya//Documents/lab/genotype-qc/spark/preimp7_imus/'
@@ -1164,7 +1170,7 @@ np.savetxt(fname=preimp7_wd+'preimp7.founders.imus.hgdp_v2.menv.assomds.sig_snps
 pca_spark = pd.read_csv(preimp7_wd+'spark.all.admixture_tmp1.scores.v2.tsv.bgz',sep='\t',compression='gzip')
 pca_spark = pca_spark.rename(columns={'s':'IID','fam_id':'FID','pat_id':'PAT','mat_id':'MAT'})
 
-pca_spark = add_spark_reported_ancestry(pca_spark, preimp3_fam)
+pca_spark, pca_spark_anc_dict = add_spark_reported_ancestry(pca_spark, preimp3_fam)
 
 # color by SPARK self-reported ancestry
 spark_anc_ls = ['unreported','white','hispanic','african_amer','asian','other','native_amer','native_hawaiian']
@@ -1176,7 +1182,7 @@ for pcs in [[x,y] for x in range(1,10) for y in range(1,10) if (x-y<0 and x-y>=-
     for anc_idx, anc in enumerate(reported_spark_anc_ls):
         spark_tmp = pca_spark[pca_spark.spark_anc==anc]
         ax.plot(spark_tmp[f'pc{pcs[0]}'],spark_tmp[f'pc{pcs[1]}'],'o',c=colors[anc_idx],alpha=0.5,markeredgecolor='None')
-    legend_elements = ([Patch(facecolor='k',label='unknown',alpha=0.5)]+
+    legend_elements = ([Patch(facecolor='k',label='unreported',alpha=0.5)]+
                        [Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(reported_spark_anc_ls)])
     #legend_elements = [Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(ancestry_ls)]
     ax.legend(handles =legend_elements)    
@@ -1188,11 +1194,14 @@ for pcs in [[x,y] for x in range(1,10) for y in range(1,10) if (x-y<0 and x-y>=-
     rangePCy = maxPCy-minPCy
     plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
     plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
-    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n(SPARK with reported ancestry: {len(pca_spark[pca_spark.spark_anc!="unreported"])}, SPARK total: {len(pca_spark)})'
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n(SPARK w/ reported ancestry: {len(pca_spark[pca_spark.spark_anc!="unreported"])}, SPARK total: {len(pca_spark)})'
     plt.title(title_str)
     plt.xlabel(f'PC{pcs[0]}')
     plt.ylabel(f'PC{pcs[1]}')
     plt.savefig(preimp7_wd+f'spark.all.projected.pc{pcs[0]}_pc{pcs[1]}.png',dpi=300)
+    
+print('\n'.join([f' {ancestry}: {len(pca_spark[pca_spark.spark_anc==ancestry])}' for ancestry in spark_anc_ls]))
+print(f'*total: {len(pca_spark)}*')
 
 
 # plot only nonfounders with reported ancestry
@@ -1284,7 +1293,7 @@ for pcs in [[x,y] for x in range(1,5) for y in range(1,5) if (x-y<0 and x-y>=-1)
 
 
 # check ADMIXTURE results from founders + HGDP reference
-k=7
+k=6
 
 admix0 = pd.read_csv(preimp7_wd+f'spark.hgdp.admixture_tmp2.{k}.Q',
                    delim_whitespace=True,
@@ -1301,8 +1310,8 @@ admix2 = admix1.loc[~admix1.FID.str.contains('preimp7'),:]
 #print(f'number of HGDP individuals: {admix2.FID.str.contains('HGDP').sum()}') # number of HGDP individuals
 
 
-admix3 = add_spark_reported_ancestry(df=admix2, 
-                                    fam=preimp3_fam)
+admix3, anc_dict = add_spark_reported_ancestry(df=admix2, 
+                                               fam=preimp3_fam)
 admix = add_hgdp_ancestry(df=admix3)
 
 # check which pop corresponds to which population
@@ -1311,8 +1320,113 @@ spark_anc_ls = ['unreported','white','hispanic','african_amer','asian','other','
 
 for spark_anc in spark_anc_ls:
     print(f'\n** {spark_anc} **\n{admix[admix.spark_anc==spark_anc][[f"pop{x}" for x in range(k)]].mean()}\nn = {admix[admix.spark_anc==spark_anc].shape[0]}')
-print('\n==================================\n') # formatting to separate two print statements
+print('\nSPARK\n==================================\nHGDP') # formatting to separate two print statements
 hgdp_anc_ls = ['africa', 'america', 'central_south_asia', 'east_asia', 'europe', 'middle_east', 'oceania']
 
 for hgdp_anc in hgdp_anc_ls:
     print(f'\n** {hgdp_anc} **\n{admix[admix.hgdp_anc==hgdp_anc][[f"pop{x}" for x in range(k)]].mean()}\nn = {admix[admix.hgdp_anc==hgdp_anc].shape[0]}')
+
+spark_pop_assign_dict = dict(zip([f'pop{i}' for i in range(k)],[[]]*k))
+hgdp_pop_assign_dict = dict(zip([f'pop{i}' for i in range(k)],[[]]*k))
+
+for spark_anc in spark_anc_ls:
+    pop = admix[admix.spark_anc==spark_anc][[f"pop{x}" for x in range(k)]].mean().idxmax()
+    spark_pop_assign_dict[pop] = spark_pop_assign_dict[pop]+[spark_anc]
+    
+for hgdp_anc in hgdp_anc_ls:
+    pop = admix[admix.hgdp_anc==hgdp_anc][[f"pop{x}" for x in range(k)]].mean().idxmax()
+    hgdp_pop_assign_dict[pop] = hgdp_pop_assign_dict[pop]+[hgdp_anc]
+
+inv_hgdp_pop_assign_dict = {}
+for key, val in hgdp_pop_assign_dict.items():
+    val=val[0]
+    inv_hgdp_pop_assign_dict[val] = inv_hgdp_pop_assign_dict.get(val, [])
+    inv_hgdp_pop_assign_dict[val].append(key)
+
+    
+print('\n'+'\n'.join([f'{k}:{v}' for k,v in spark_pop_assign_dict.items()]))
+print('\nSPARK\n==================================\nHGDP') # formatting to separate two print statements
+print('\n'.join([f'{k}:{v}' for k,v in hgdp_pop_assign_dict.items()]))
+
+# make stacked bar graph
+admix_reported = admix[(admix.spark_anc!='unreported')&(~admix.spark_anc.isna())]
+
+#rearrange to have european as pop0
+admix_reported['pop0_tmp'] = admix_reported[inv_hgdp_pop_assign_dict['europe']].copy()
+admix_reported[inv_hgdp_pop_assign_dict['europe'][0]] = admix_reported['pop0'].copy()
+admix_reported['pop0'] = admix_reported['pop0_tmp'].copy()
+admix_reported = admix_reported.drop('pop0_tmp',axis=1)
+hgdp_pop_assign_dict[inv_hgdp_pop_assign_dict['europe'][0]] = hgdp_pop_assign_dict['pop0']
+hgdp_pop_assign_dict['pop0'] = ['europe']
+inv_hgdp_pop_assign_dict = {}
+for key, val in hgdp_pop_assign_dict.items():
+    val=val[0]
+    inv_hgdp_pop_assign_dict[val] = inv_hgdp_pop_assign_dict.get(val, [])
+    inv_hgdp_pop_assign_dict[val].append(key)
+
+
+
+
+## plot pca colored by max ADMIXTURE population proportion
+
+max_anc_prop = admix[[f'pop{pop}' for pop in  range(k)]].values.argmax(axis=1) # admixture results with ancestry guess based on maximum ancestry proportion
+admix_w_anc_guess = admix.copy()
+hgdp_pop_assign_dict = dict(zip([f'pop{i}' for i in range(k)],[[]]*k))
+for hgdp_anc in hgdp_anc_ls:
+    pop = admix[admix.hgdp_anc==hgdp_anc][[f"pop{x}" for x in range(k)]].mean().idxmax()
+    hgdp_pop_assign_dict[pop] = hgdp_pop_assign_dict[pop]+[hgdp_anc]
+inv_hgdp_pop_assign_dict = {}
+for key, val in hgdp_pop_assign_dict.items():
+    val=val[0]
+    inv_hgdp_pop_assign_dict[val] = inv_hgdp_pop_assign_dict.get(val, [])
+    inv_hgdp_pop_assign_dict[val].append(key)
+admix_w_anc_guess['admixture_anc'] = [hgdp_pop_assign_dict[f'pop{i}'][0] for i in max_anc_prop]
+
+spark_tmp = admix_w_anc_guess.merge(pca_spark,on=['IID'])
+
+alt_hgdp_anc_ls = ['europe','east_asia','middle_east','america','central_south_asia','africa','oceania']
+
+for pcs in [[x,y] for x in range(1,9) for y in range(1,9) if (x-y<0 and x-y>=-1)]:
+    fig,ax=plt.subplots(figsize=(1.5*6,1.5*4))
+    for anc_idx, anc in enumerate(alt_hgdp_anc_ls):
+        spark_anc_tmp = spark_tmp[spark_tmp.admixture_anc==anc]
+        plt.plot(spark_anc_tmp[f'pc{pcs[0]}'],spark_anc_tmp[f'pc{pcs[1]}'],'o',c=colors[anc_idx],alpha=0.5,markeredgecolor='None')
+    legend_elements = ([Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(alt_hgdp_anc_ls)])
+    #legend_elements = [Patch(facecolor=colors[anc_idx],label=anc) for anc_idx,anc in enumerate(ancestry_ls)]
+    ax.legend(handles =legend_elements)
+    minPCx = spark_tmp[f'pc{pcs[0]}'].min()
+    maxPCx = spark_tmp[f'pc{pcs[0]}'].max()
+    rangePCx = maxPCx-minPCx
+    minPCy = spark_tmp[f'pc{pcs[1]}'].min()
+    maxPCy = spark_tmp[f'pc{pcs[1]}'].max()
+    rangePCy = maxPCy-minPCy
+    plt.xlim([minPCx-rangePCx*0.05, maxPCx+rangePCx*0.05])
+    plt.ylim([minPCy-rangePCy*0.05, maxPCy+rangePCy*0.05])
+    title_str =  f'PC{pcs[0]} vs PC{pcs[1]}\n({len(spark_tmp)} SPARK, k= {k})'
+    plt.title(title_str)
+    plt.xlabel(f'PC{pcs[0]}')
+    plt.ylabel(f'PC{pcs[1]}')
+    plt.savefig(preimp7_wd+f'spark.admixture_anc_guess.k_{k}.pc{pcs[0]}_pc{pcs[1]}.png',dpi=300)
+
+print(f'Population count (k={k}):')
+for hgdp_anc in alt_hgdp_anc_ls:
+    print(f'\r{hgdp_anc}: {admix_w_anc_guess[admix_w_anc_guess.admixture_anc==hgdp_anc].shape[0]}')
+
+admix_reported_sub = admix_w_anc_guess.loc[~admix_w_anc_guess.spark_anc.isna()]
+admix_reported_sub = admix_reported_sub.sort_values(by=['admixture_anc'],ascending=True)
+admix_reported_sub = admix_reported_sub[~admix_reported_sub.pop0.isna()]
+
+fig,ax=plt.subplots(figsize=(6*2,3*2))
+prev=0
+for pop in range(k):
+#    print(pop)
+    bar = ax.bar(admix_reported_sub.index, admix_reported_sub[f'pop{pop}'],
+                  bottom=(0*admix_reported_sub.index if pop==0 else prev),
+                  width=1)
+    prev = admix_reported_sub[f'pop{pop}']+prev
+plt.legend([v[0] for k,v in hgdp_pop_assign_dict.items()])
+plt.xlim([-0.5,len(admix_reported_sub)-0.5])
+plt.ylim([0,1])
+plt.title(f'ADMIXTURE results (k={k})')
+plt.savefig(preimp7_wd+f'admixture_proportions.k_{k}.v2.png',dpi=300)
+
