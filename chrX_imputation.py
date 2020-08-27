@@ -398,7 +398,7 @@ def plot_maf_diff_test_qq(merge, title='', maf=None, ymax=None):
     if ymax!=None:
         plt.ylim([-ymax/20, ymax])
     plt.title(title+f'\n{f"maf in both sexes≥{maf} " if maf!=None else "" }({merge.shape[0]} SNPs{f", {zero_pval_ct} SNPs with p-val=0" if zero_pval_ct!=0 else ""})')
-    plt.savefig(f'/Users/nbaya/Downloads/maf_diff_qq.{title.replace(" ","_")}{f".maf_{maf}" if maf!=None else ""}{f".ymax_{ymax}" if ymax!=None else ""}.png',dpi=300)
+    plt.savefig(f'/Users/nbaya/Downloads/maf_diff_qq.{get_title_str(title)}{f".maf_{maf}" if maf!=None else ""}{f".ymax_{ymax}" if ymax!=None else ""}.png',dpi=300)
 
 def plot_t_manhattan(merge, yaxis='abs_z', title='', maf=None):
     if maf!=None:
@@ -422,7 +422,7 @@ def plot_t_manhattan(merge, yaxis='abs_z', title='', maf=None):
     plt.ylabel(xlabel)
 #    plt.yscale('symlog',linthresholdy=1e-9)
     plt.title(title+f'\n{f"maf in both sexes≥{maf} " if maf!=None else "" }({merge.shape[0]} SNPs{f", {zero_pval_ct} SNPs with p-val=0" if zero_pval_ct!=0 else ""})')
-    plt.savefig(f'/Users/nbaya/Downloads/maf_ttest_manhattan.{yaxis}.{title.replace(" ","_")}{f".maf_{maf}" if maf!=None else ""}.png',dpi=300)
+    plt.savefig(f'/Users/nbaya/Downloads/maf_ttest_manhattan.{yaxis}.{get_title_str(title)}{f".maf_{maf}" if maf!=None else ""}.png',dpi=300)
     
 ukb_X_f_frqx = pd.read_csv(f'{wd}/ukb_X.females.frqx', sep='\t')
 ukb_X_m_frqx = pd.read_csv(f'{wd}/ukb_X.males.frqx', sep='\t')
@@ -587,16 +587,16 @@ plot_fhet_ind(df=ukb_PAR_m_fhet_gt_08, title='UKB PAR reported male, Fhet > 0.8'
 
 # 3.1 SPARK chr X
 for data, label in [('spark.geno',' (genotyped)'),('spark',' (imputed)')]:
-    spark_chrX_f_frqx = pd.read_csv(f'{wd}/{data}.chrX.females.frqx', sep='\t')
-    spark_chrX_m_frqx = pd.read_csv(f'{wd}/{data}.chrX.males.frqx', sep='\t')
+    spark_chrX_f_frqx = pd.read_csv(f'{wd}/{data}.chrX.founders.females.frqx', sep='\t')
+    spark_chrX_m_frqx = pd.read_csv(f'{wd}/{data}.chrX.founders.males.frqx', sep='\t')
     merge = get_maf_diff_t(male=spark_chrX_m_frqx , female=spark_chrX_f_frqx )
     
-    plot_maf_diff_test_qq(merge=merge, title='SPARK chr X{label}')
+    plot_maf_diff_test_qq(merge=merge, title=f'SPARK chr X founders{label}')
     
-    bim = pd.read_csv(f'{wd}/spark.eur.chr23.cleaned.bim', delim_whitespace=True, names=['CHR','SNP','CM','POS','A1','A2'])
+    bim = pd.read_csv(f'{wd}/spark.eur.chr23.{"cleaned" if data=="spark" else "geno"}.bim', delim_whitespace=True, names=['CHR','SNP','CM','POS','A1','A2'])
     merge = merge.merge(bim, on='SNP')
     
-    plot_t_manhattan(merge=merge, yaxis='abs_z', title='SPARK chr X{label}')
+    plot_t_manhattan(merge=merge, yaxis='abs_z', title=f'SPARK chr X founders{label}')
 
 
 
