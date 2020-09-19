@@ -7,7 +7,7 @@
 # 3) Remove related samples
 # 3) Run PCA
 #
-# Author: Nikolas Baya, Mar 2020
+# Author: Nikolas Baya, (2020-09-19)
 
 # TODO: FID/IIDs with asterisk do not work with grep
 # To fix this, could sed all asterisks with random string, then sed after grep step to return the asterisks
@@ -63,7 +63,7 @@ while [ ${nprune_old} -gt ${nprune_new} ]; do
   nprune_old=$nprune_new
   nprune_new=$( wc -l < tmp4_${bfile}_prune$i.prune.in )
   echo "nprune_old: ${nprune_old}, nprune_new: ${nprune_new}" >> ${log} 2>&1
-  
+
   if [[ $i -eq ${maxiter} ]]; then
     echo "Error: LD pruning step failed to converge after {maxiter} iterations." | tee -a ${log}  && exit 1
   fi
@@ -94,7 +94,7 @@ related_fname=${bfile}.remove.related.txt
 if [[ $( cat tmp_${bfile}.related_ct.txt | wc -l ) -eq 0 ]]; then
   touch ${related_fname}
   echo "No related samples identified by PLINK IBD" >> ${log}
-  
+
 else
   i=0
   ibd_idx=0
@@ -104,13 +104,13 @@ else
   while read line; do
     arr=(${line})
     new_grep_str="${arr[1]}.*${arr[2]}"
-  
+
     if [[ ${old_grep_str} == "" ]]; then
       grep_str=${new_grep_str}
     else
       grep_str="${old_grep_str}\|${new_grep_str}"
     fi
-  
+
     old_grep_str=${grep_str}
     new_line_ct=$(grep -v ${grep_str} ${ibd_curr} | grep -v 'FID1.*IID1.*FID2.*IID2' | wc -l)
     if [[ ${new_line_ct} -eq 0 ]]; then
@@ -119,9 +119,9 @@ else
       echo -e "${arr[1]} ${arr[2]}" >> ${related_fname}
       old_line_ct=${new_line_ct}
     fi
-  
+
     i=$(($i+1))
-  
+
     if [[ $i -eq 100 ]]; then # every 100 samples, create new filtered .genome file and re-initialize grep str to speed up process
       ibd_new=tmp${ibd_idx}_${bfile}.removerelateds.genome
       grep -v ${grep_str} ${ibd_curr} > ${ibd_new}
@@ -134,13 +134,13 @@ else
   done < tmp_${bfile}.related_ct.txt
 
   test ! -f ${related_fname}  && echo "Error: Obtaining list of related samples failed." | tee -a ${log} && exit 1
-  
+
 fi
 
 echo -e "...Running PCA..." | tee -a ${log}
 n_pcs=20
 
-plink --bfile tmp4_${bfile} --remove ${related_fname} --pca ${n_pcs} header --silent --out tmp_${bfile}.simple_pca >> ${log} 2>&1
+plink --bfile tmp4_${bfile}_finalpruned --remove ${related_fname} --make-bed --pca ${n_pcs} header --silent --out tmp_${bfile}.simple_pca >> ${log} 2>&1
 
 pca_files=( tmp_${bfile}.simple_pca.eigenv{al,ec} )
 for file in ${pca_files[@]}; do
