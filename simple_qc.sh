@@ -12,12 +12,12 @@ fi
 
 ## QC thresholds (uses same naming convention as Ricopili)
 
-PRE_GENO=0.05 # include only SNPs with missing-rate < $PRE_GENO (before ID filter), important for post merge of multiple platforms
-MIND=0.02     # include only IDs with missing-rate < $MIND
+PRE_GENO=0.05 # include only variants with missing-rate < $PRE_GENO (before sample filter), important for post merge of multiple platforms
+MIND=0.02     # include only samples with missing-rate < $MIND
 FHET_TH=0.2   # include only samples with -$FHET_TH < FHET < $FHET_TH
-GENO=0.02     # include only SNPs with missing-rate < $GENO
-HWE_TH=1e-10  # include only SNPs with HWE p-val > $HWE_TH
-MAF=0.005     # include only SNPs with minor allele frequency < $MAF
+GENO=0.02     # include only variants with missing-rate < $GENO
+HWE_TH=1e-10  # include only variants with HWE p-val > $HWE_TH
+MAF=0.005     # include only variants with minor allele frequency < $MAF
 
 
 count () {
