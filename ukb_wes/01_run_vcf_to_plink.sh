@@ -33,26 +33,23 @@ prefix=ukb_wes_200k_chr${chrom}
 tmp_vcf=${wd}/vcf/tmp-${prefix}.vcf.gz # intermediate VCF before going to PLINK
 bfile=${wd}/plink/${prefix} # PLINK bfile prefix
 
+timecheck() {
+  echo -e "\n########\n$1 ($(date))\n########"
+}
 
 # check that VCFs are not truncated
 if [ $( bcftools view ${vcf} 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
-  echo -e "WARNING: ${vcf} may be truncated\nSkipping this VCF"
+  >&2 echo -e "WARNING: ${vcf} may be truncated\nSkipping this VCF\n"
   exit 1
 fi
 
-echo -e "\n########"  && \
-date  && \
-echo "chr${chrom} start"  && \
-echo -e "########\n"
+timecheck "chr${chrom} start"
 
 if [ ! -f ${tmp_vcf} ]; then
   bcftools norm -Ou -m -any ${vcf} | # split sites with multiple alleles
     bcftools norm -Oz -f ${fasta} -o ${tmp_vcf} # left-align and normalise indels using fasta file
 
-  echo -e "\n########"  && \
-  date  && \
-  echo "chr${chrom} temporary VCF finished writing"  && \
-  echo -e "########\n"
+  timecheck "chr${chrom} temporary VCF finished writing"
 
 else
   echo "${tmp_vcf} already exists, skipping multiallelic split and indel normalisation"
@@ -68,10 +65,7 @@ if [ ! -f ${bfile}}.bed ]; then
     --make-bed \
     --out ${bfile}
 
-  echo -e "\n########" && \
-  date && \
-  echo "chr${chrom} PLINK finished" && \
-  echo -e "########\n"
+  timecheck "chr${chrom} PLINK files finished writing"
 
 else
   echo "${bfile}.bed already exists, skipping VCF to PLINK conversion"
@@ -88,3 +82,5 @@ if [ $? -eq 0 ]; then
     echo "WARNING: Check that ${bfile}.bim_old does not exist and that ${bfile}.bim_new exists"
   fi
 fi
+
+timecheck "chr${chrom} VCF to PLINK script complete"
