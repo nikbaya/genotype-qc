@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 #
-# Make variant IDs in the format provided by the UKB WES team
+# Make variant IDs in the format of the UKB WES team
 #
 
 import pandas as pd
 import numpy as np
 import subprocess
 
-wd = '/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/test'
+wd = '/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/plink'
 
-for chrom in range(20,23):
+for chrom in range(1,23):
   df = pd.read_csv(f'{wd}/test_ukb_wes_chr{chrom}.bim', sep='\t', names=['chr','varid','cm','pos','a1','a2'])
 
   print(df.head())
@@ -19,8 +19,8 @@ for chrom in range(20,23):
 
   df['varid'] = df.chr.astype(str) + ':' + df.pos.astype(str) + ':'
   df.loc[df.a1_len==df.a2_len, 'varid'] = df.varid + df.a2 + ':' + df.a1
-  df.loc[df.a1_len>df.a2_len, 'varid'] = df.varid + 'I:'+(df.a1_len-df.a2_len).astype(str)
-  df.loc[df.a1_len<df.a2_len, 'varid'] = df.varid + 'D:'+(df.a1_len-df.a2_len).astype(str)
+  df.loc[df.a1_len>df.a2_len, 'varid'] = df.varid + 'I:'+(df.a1_len-df.a2_len).abs().astype(str)
+  df.loc[df.a1_len<df.a2_len, 'varid'] = df.varid + 'D:'+(df.a1_len-df.a2_len).abs().astype(str)
 
   print(df.head())
 
