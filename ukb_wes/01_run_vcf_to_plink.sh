@@ -18,7 +18,7 @@
 #$ -l h_rt=29:00:00
 #$ -V
 #$ -P lindgren.prjc
-#$ -t 1-22
+#$ -t 18,21
 
 chrom=${SGE_TASK_ID}
 
@@ -33,27 +33,32 @@ prefix=ukb_wes_200k_chr${chrom}
 tmp_vcf=${wd}/vcf/tmp-${prefix}.vcf.gz # intermediate VCF before going to PLINK
 bfile=${wd}/plink/${prefix} # PLINK bfile prefix
 
-timecheck() {
+time_check() {
   echo -e "\n########\n$1 ($(date))\n########"
 }
 
 # check that VCFs are not truncated
-if [ $( bcftools view ${vcf} 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
-  >&2 echo -e "WARNING: ${vcf} may be truncated\nSkipping this VCF\n"
-  exit 1
-fi
+vcf_check() {
+  if [ $( bcftools view $1 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
+    >&2 echo -e "WARNING: $1 may be truncated\nSkipping this VCF\n"
+    exit 1
+  fi
+}
 
-timecheck "chr${chrom} start"
+time_check "chr${chrom} start"
 
 if [ ! -f ${tmp_vcf} ]; then
+  vcf_check ${vcf}
   bcftools norm -Ou -m -any ${vcf} | # split sites with multiple alleles
     bcftools norm -Oz -f ${fasta} -o ${tmp_vcf} # left-align and normalise indels using fasta file
 
-  timecheck "chr${chrom} temporary VCF finished writing"
+  time_check "chr${chrom} temporary VCF finished writing"
 
 else
   echo "${tmp_vcf} already exists, skipping multiallelic split and indel normalisation"
 fi
+
+vcf_check ${tmp_check}
 
 # NOTE: We only check for the bed file for simplicity
 if [ ! -f ${bfile}}.bed ]; then
@@ -65,14 +70,14 @@ if [ ! -f ${bfile}}.bed ]; then
     --make-bed \
     --out ${bfile}
 
-  timecheck "chr${chrom} PLINK files finished writing"
+  time_check "chr${chrom} PLINK files finished writing"
 
 else
   echo "${bfile}.bed already exists, skipping VCF to PLINK conversion"
 fi
 
 # update variant IDs
-python3 ${wd}/scripts/make_variant_ids.py --chr ${chrom}
+python3 ${wd}/scripts/make_variant_ids.py --chr ${chrom} --bfile "ukb_wes_200k_chr"
 
 if [ $? -eq 0 ]; then
   if [[ ! -f ${bfile}.bim_old  && -f ${bfile}.bim_new ]]; then # add a somewhat redundant check to be sure that .bim_new exists
@@ -83,4 +88,4 @@ if [ $? -eq 0 ]; then
   fi
 fi
 
-timecheck "chr${chrom} VCF to PLINK script complete"
+time_check "chr${chrom} VCF to PLINK script complete"
