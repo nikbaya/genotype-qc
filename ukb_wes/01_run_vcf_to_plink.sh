@@ -18,7 +18,7 @@
 #$ -l h_rt=29:00:00
 #$ -V
 #$ -P lindgren.prjc
-#$ -t 18,21
+#$ -t 10,9,5,7,6,3
 
 chrom=${SGE_TASK_ID}
 
@@ -61,14 +61,14 @@ fi
 vcf_check ${tmp_check}
 
 # NOTE: We only check for the bed file for simplicity
-if [ ! -f ${bfile}}.bed ]; then
+if [ ! -f ${bfile}.bed ]; then
   plink2 --vcf ${tmp_vcf} \
     --keep-allele-order \
     --double-id \
     --allow-extra-chr \
     --memory 13500 \
     --make-bed \
-    --out ${bfile}
+   --out ${bfile}
 
   time_check "chr${chrom} PLINK files finished writing"
 
