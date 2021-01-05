@@ -18,7 +18,7 @@
 #$ -V
 #$ -pe shmem 20
 #$ -P lindgren.prjc
-#$ -t 1-23
+#$ -t 2-23
 
 if [ ${SGE_TASK_ID} -eq 23 ]; then
   chrom="X"
@@ -59,7 +59,7 @@ time_check "chr${chrom} start"
 if [ ! -f ${tmp_vcf} ]; then
   vcf_check ${vcf}
   time_check "chr${chrom} start temporary VCF writing"
-  bcftools norm -Oz -f ${fasta} -m -any -o ${tmp_vcf} ${vcf}
+  bcftools norm -Oz -f ${fasta} -m -any --threads 20 -o ${tmp_vcf} ${vcf}
   vcf_check ${tmp_vcf}
   time_check "chr${chrom} temporary VCF finished writing"
 else
