@@ -16,14 +16,14 @@
 #$ -q long.qf
 #$ -l h_rt=100:00:00
 #$ -V
-#$ -pe shmem 10
+#$ -pe shmem 20
 #$ -P lindgren.prjc
-#$ -t 4,8
+#$ -t 1-23
 
 if [ ${SGE_TASK_ID} -eq 23 ]; then
   chrom="X"
 else
- chrom=${SGE_TASK_ID}
+  chrom=${SGE_TASK_ID}
 fi
 
 wd=/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink
@@ -59,8 +59,7 @@ time_check "chr${chrom} start"
 if [ ! -f ${tmp_vcf} ]; then
   vcf_check ${vcf}
   time_check "chr${chrom} start temporary VCF writing"
-  bcftools norm -Ou -m -any ${vcf} | \
-    bcftools norm -Oz -f ${fasta} -o ${tmp_vcf} --threads 10 # left-align and normalise indels using fasta file
+  bcftools norm -Oz -f ${fasta} -m -any -o ${tmp_vcf} ${vcf}
   vcf_check ${tmp_vcf}
   time_check "chr${chrom} temporary VCF finished writing"
 else
