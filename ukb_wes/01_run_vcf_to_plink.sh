@@ -57,13 +57,12 @@ vcf_check() {
 time_check "chr${chrom} start"
 
 if [ ! -f ${tmp_vcf} ]; then
-  set -x
   vcf_check ${vcf}
+  time_check "chr${chrom} start temporary VCF writing"
   bcftools norm -Ou -m -any ${vcf} | \
     bcftools norm -Oz -f ${fasta} -o ${tmp_vcf} --threads 10 # left-align and normalise indels using fasta file
   vcf_check ${tmp_vcf}
   time_check "chr${chrom} temporary VCF finished writing"
-  set +x
 else
   vcf_check ${tmp_vcf}
   time_check "Warning: ${tmp_vcf} already exists, skipping multiallelic split and indel normalisation"
@@ -71,6 +70,7 @@ fi
 
 # NOTE: We only check for the bed file for simplicity
 if [ ! -f ${bfile}.bed ]; then
+  time_check "chr${chrom} start PLINK files writing"
   plink2 --vcf ${tmp_vcf} \
     --keep-allele-order \
     --double-id \
