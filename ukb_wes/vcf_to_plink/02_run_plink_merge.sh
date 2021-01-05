@@ -8,7 +8,7 @@
 #$ -o ./plink_merge.log
 #$ -e ./plink_merge.errors.log
 #$ -q long.qf
-#$ -l h_rt=60:00:00
+#$ -l h_rt=100:00:00
 #$ -pe shmem 20
 #$ -V
 #$ -P lindgren.prjc
@@ -38,7 +38,7 @@ cat ${MERGELIST}
 if [ ! -f ${OUT}.bed ]; then
   plink --merge-list ${MERGELIST} \
     --make-bed \
-    --memory 12000 \
+    --memory 80000 \
     --out ${OUT}
   if [ -f ${OUT}.bed ]; then
     echo "Error: ${OUT}.bed was not successfully written."
