@@ -18,7 +18,7 @@
 #$ -V
 #$ -pe shmem 10
 #$ -P lindgren.prjc
-#$ -t 4
+#$ -t 4,8
 
 if [ ${SGE_TASK_ID} -eq 23 ]; then
   chrom="X"
@@ -44,11 +44,11 @@ time_check() {
 # check that VCFs are not truncated
 vcf_check() {
   if [ ! -f $1 ]; then
-    >&2 time_check "ERROR: $1 does not exist. Exiting.\n"
+    >&2 time_check "Error: $1 does not exist. Exiting.\n"
     exit 1
   else
     if [ $( bcftools view $1 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
-      >&2 time_check "ERROR: $1 may be truncated. Exiting.\n"
+      >&2 time_check "Error: $1 may be truncated. Exiting.\n"
       exit 1
     fi
   fi
@@ -66,7 +66,7 @@ if [ ! -f ${tmp_vcf} ]; then
   set +x
 else
   vcf_check ${tmp_vcf}
-  time_check "${tmp_vcf} already exists, skipping multiallelic split and indel normalisation"
+  time_check "Warning: ${tmp_vcf} already exists, skipping multiallelic split and indel normalisation"
 fi
 
 # NOTE: We only check for the bed file for simplicity
@@ -79,17 +79,26 @@ if [ ! -f ${bfile}.bed ]; then
     --make-bed \
    --out ${bfile}
 
-  time_check "chr${chrom} PLINK files finished writing"
-
+  if [ -f ${bfile}.bed ]; then
+    time_check "chr${chrom} PLINK files finished writing"
+  else
+    >&2 time_check "Error: chr${chrom} PLINK files were not written successfully. Exiting.\n"
+    exit 1
+  fi
 else
-  time_check "${bfile}.bed already exists, skipping VCF to PLINK conversion"
+  time_check "Warning: ${bfile}.bed already exists, skipping VCF to PLINK conversion"
 fi
 
-# update variant IDs
+# create variant IDs
 if [ -f ${bfile}.bim ]; then
-  python3 ${wd}/scripts/make_variant_ids.py --chr ${chrom} --bfile "ukb_wes_200k_chr"
+  if [ -f ${bfile}.bim_new ]; then
+    >&2 time_check "Error: ${bfile}.bim_new already exists. Exiting.\n"
+    exit 0
+  else
+    python3 ${wd}/scripts/make_variant_ids.py --bfile ${bfile}
+  fi
 else
-  >&2 time_check "ERROR: ${bfile}.bim does not exist, new variant IDs cannot be created. Exiting.\n"
+  >&2 time_check "Error: ${bfile}.bim does not exist, new variant IDs cannot be created. Exiting.\n"
   exit 1
 fi
 
@@ -98,7 +107,7 @@ if [ $? -eq 0 ]; then
     mv ${bfile}.bim ${bfile}.bim_old && \
       ln -s -f ${bfile}.bim_new ${bfile}.bim # create symlink instead of changing filename to indicate that we're using the .bim_new file as a replacement
   else
-    echo "WARNING: Check that ${bfile}.bim_old does not exist and that ${bfile}.bim_new exists"
+    echo "Error: Check that ${bfile}.bim_old does not exist and that ${bfile}.bim_new exists"
   fi
 fi
 
