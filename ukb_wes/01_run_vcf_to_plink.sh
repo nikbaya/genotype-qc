@@ -20,10 +20,12 @@
 #$ -P lindgren.prjc
 #$ -t 2-23
 
-if [ ${SGE_TASK_ID} -eq 23 ]; then
+chrom=${SGE_TASK_ID}
+
+if [ ${chrom} -eq 23 ]; then
   chrom="X"
-else
-  chrom=${SGE_TASK_ID}
+elif [ ${chrom} -eq 24 ] then
+  chrom="Y"
 fi
 
 wd=/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink
