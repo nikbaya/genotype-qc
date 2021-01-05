@@ -26,13 +26,11 @@ if [ ! -f mergelist.txt ]; then
     elif [ $chr -eq 24 ]; then
       chr="Y"
     fi
-    echo "ukb_wes_chr$i" >> ${mergelist}
+    echo "ukb_wes_chr${chr}" >> ${mergelist}
   done
 else
   echo "Warning: ${mergelist} already exists, skipping file creation"
 fi
-
-exit 0
 
 if [ ! -f ${out}.bed ]; then
   plink --merge-list ${mergelist} \
