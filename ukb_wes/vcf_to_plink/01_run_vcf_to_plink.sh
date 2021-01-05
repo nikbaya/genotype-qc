@@ -20,24 +20,24 @@
 #$ -P lindgren.prjc
 #$ -t 2-23
 
-chrom=${SGE_TASK_ID}
+readonly CHR=${SGE_TASK_ID}
 
-if [ ${chrom} -eq 23 ]; then
-  chrom="X"
-elif [ ${chrom} -eq 24 ] then
-  chrom="Y"
+if [ ${CHR} -eq 23 ]; then
+  CHR="X"
+elif [ ${CHR} -eq 24 ] then
+  CHR="Y"
 fi
 
-wd=/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink
+readonly WD=/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink
 
 # input paths
-vcf=/well/lindgren/UKBIOBANK/saskia/vcf_Filter/ukbb-wes-oqfe-pvcf-chr${chrom}_filtered.vcf.gz
-fasta=/well/lindgren/saskia/WES/trial/ref/GRCh38_full_analysis_set_plus_decoy_hla.fa
+readonly VCF=/well/lindgren/UKBIOBANK/saskia/vcf_Filter/ukbb-wes-oqfe-pvcf-chr${CHR}_filtered.vcf.gz
+readonly FASTA=/well/lindgren/saskia/WES/trial/ref/GRCh38_full_analysis_set_plus_decoy_hla.fa
 
 # output paths
-prefix=ukb_wes_200k_chr${chrom}
-tmp_vcf=${wd}/vcf/tmp-${prefix}.vcf.gz # intermediate VCF before going to PLINK
-bfile=${wd}/plink/${prefix} # PLINK bfile prefix
+readonly PREFIX=ukb_wes_200k_chr${CHR}
+readonly TMP_VCF=${WD}/vcf/tmp-${PREFIX}.vcf.gz # intermediate VCF before going to PLINK
+readonly BFILE=${WD}/plink/${PREFIX} # PLINK bfile prefix
 
 time_check() {
   echo -e "\n########\n$1 (job id: ${JOB_ID}.${SGE_TASK_ID}, $(date))\n########"
@@ -56,60 +56,60 @@ vcf_check() {
   fi
 }
 
-time_check "chr${chrom} start"
+time_check "chr${CHR} start"
 
-if [ ! -f ${tmp_vcf} ]; then
-  vcf_check ${vcf}
-  time_check "chr${chrom} start temporary VCF writing"
-  bcftools norm -Oz -f ${fasta} -m -any --threads 20 -o ${tmp_vcf} ${vcf}
-  vcf_check ${tmp_vcf}
-  time_check "chr${chrom} temporary VCF finished writing"
+if [ ! -f ${TMP_VCF} ]; then
+  vcf_check ${VCF}
+  time_check "chr${CHR} start temporary VCF writing"
+  bcftools norm -Oz -f ${FASTA} -m -any --threads 20 -o ${TMP_VCF} ${VCF}
+  vcf_check ${TMP_VCF}
+  time_check "chr${CHR} temporary VCF finished writing"
 else
-  vcf_check ${tmp_vcf}
-  time_check "Warning: ${tmp_vcf} already exists, skipping multiallelic split and indel normalisation"
+  vcf_check ${TMP_VCF}
+  time_check "Warning: ${TMP_VCF} already exists, skipping multiallelic split and indel normalisation"
 fi
 
 # NOTE: We only check for the bed file for simplicity
-if [ ! -f ${bfile}.bed ]; then
-  time_check "chr${chrom} start PLINK files writing"
-  plink2 --vcf ${tmp_vcf} \
+if [ ! -f ${BFILE}.bed ]; then
+  time_check "chr${CHR} start PLINK files writing"
+  plink2 --vcf ${TMP_VCF} \
     --keep-allele-order \
     --double-id \
     --allow-extra-chr \
     --memory 40000 \
     --make-bed \
-   --out ${bfile}
+   --out ${BFILE}
 
-  if [ -f ${bfile}.bed ]; then
-    time_check "chr${chrom} PLINK files finished writing"
+  if [ -f ${BFILE}.bed ]; then
+    time_check "chr${CHR} PLINK files finished writing"
   else
-    >&2 time_check "Error: chr${chrom} PLINK files were not written successfully. Exiting.\n"
+    >&2 time_check "Error: chr${CHR} PLINK files were not written successfully. Exiting.\n"
     exit 1
   fi
 else
-  time_check "Warning: ${bfile}.bed already exists, skipping VCF to PLINK conversion"
+  time_check "Warning: ${BFILE}.bed already exists, skipping VCF to PLINK conversion"
 fi
 
 # create variant IDs
-if [ -f ${bfile}.bim ]; then
-  if [ -f ${bfile}.bim_new ]; then
-    >&2 time_check "Error: ${bfile}.bim_new already exists. Exiting.\n"
+if [ -f ${BFILE}.bim ]; then
+  if [ -f ${BFILE}.bim_new ]; then
+    >&2 time_check "Error: ${BFILE}.bim_new already exists. Exiting.\n"
     exit 0
   else
-    python3 ${wd}/scripts/make_variant_ids.py --bfile ${bfile}
+    python3 ${WD}/scripts/make_variant_ids.py --bfile ${BFILE}
   fi
 else
-  >&2 time_check "Error: ${bfile}.bim does not exist, new variant IDs cannot be created. Exiting.\n"
+  >&2 time_check "Error: ${BFILE}.bim does not exist, new variant IDs cannot be created. Exiting.\n"
   exit 1
 fi
 
 if [ $? -eq 0 ]; then
-  if [[ ! -f ${bfile}.bim_old  && -f ${bfile}.bim_new ]]; then # add a somewhat redundant check to be sure that .bim_new exists
-    mv ${bfile}.bim ${bfile}.bim_old && \
-      ln -s -f ${bfile}.bim_new ${bfile}.bim # create symlink instead of changing filename to indicate that we're using the .bim_new file as a replacement
+  if [[ ! -f ${BFILE}.bim_old  && -f ${BFILE}.bim_new ]]; then # add a somewhat redundant check to be sure that .bim_new exists
+    mv ${BFILE}.bim ${BFILE}.bim_old && \
+      ln -s -f ${BFILE}.bim_new ${BFILE}.bim # create symlink instead of changing filename to indicate that we're using the .bim_new file as a replacement
   else
-    echo "Error: Check that ${bfile}.bim_old does not exist and that ${bfile}.bim_new exists"
+    echo "Error: Check that ${BFILE}.bim_old does not exist and that ${BFILE}.bim_new exists"
   fi
 fi
 
-time_check "chr${chrom} VCF to PLINK script complete"
+time_check "chr${CHR} VCF to PLINK script complete"
