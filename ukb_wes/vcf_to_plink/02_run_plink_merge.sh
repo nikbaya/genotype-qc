@@ -5,11 +5,11 @@
 # Author: Nik Baya (2021-01-05)
 #
 #$ -N plink_merge
-#$ -o ./plink_merge.log
-#$ -e ./plink_merge.errors.log
+#$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/scripts/plink_merge.log
+#$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/scripts/plink_merge.errors.log
 #$ -q long.qf
-#$ -l h_rt=100:00:00
-#$ -pe shmem 20
+#$ -l h_rt=10:00:00
+#$ -pe shmem 40
 #$ -V
 #$ -P lindgren.prjc
 
@@ -52,6 +52,8 @@ fi
 echo -e "\nstarting plink merge (job id: ${JOB_ID}, $( date ))\n"
 echo -e "Files to merge:\n$( cat ${MERGELIST} )"
 
+SECONDS=0
+
 if ! plink_files_exist ${OUT}; then
   plink --merge-list ${MERGELIST} \
     --make-bed \
@@ -64,3 +66,6 @@ if ! plink_files_exist ${OUT}; then
 else
   echo "Warning: ${OUT}.{bed,bim,fam} already exist, skipping PLINK merge"
 fi
+
+duration=${SECONDS}
+echo "plink merge finished, elapsed time: $( echo "scale=2; ${duration}/3600" | bc -l ) hrs (job id: ${JOB_ID}, $( date )"
