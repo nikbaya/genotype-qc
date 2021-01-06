@@ -31,12 +31,16 @@ if [ ! -f ${MERGELIST} ]; then
     elif [ ${chr} -eq 24 ]; then
       chr="Y"
     fi
-    if plink_files_exist ${BFILE}${CHR}; then
-      echo "${BFILE}${CHR}" >> ${MERGELIST}
+    if plink_files_exist ${BFILE}${chr}; then
+      echo "${BFILE}${chr}" >> ${MERGELIST}
+    else
+      echo "Error: ${BFILE}${chr}.{bed,bim,fam} files are not successfully written. Exiting."
+      exit 1
     fi
   done
 else
   echo "Warning: ${MERGELIST} already exists, skipping file creation"
+  # if merge list exists, check that each entry is a valid bfile before proceeding
   while read line; do
     if ! plink_files_exist ${line}; then
       echo -e "Error: ${line}.{bed,bim,fam} files do not exist.\nPlease double-check the contents of ${MERGELIST}"
@@ -46,9 +50,7 @@ else
 fi
 
 echo -e "\nstarting plink merge (job id: ${JOB_ID}, $( date ))\n"
-cat ${MERGELIST}
-
-exit 0
+echo -e "Files to merge:\n$( cat ${MERGELIST} )"
 
 if ! plink_files_exist ${OUT}; then
   plink --merge-list ${MERGELIST} \
