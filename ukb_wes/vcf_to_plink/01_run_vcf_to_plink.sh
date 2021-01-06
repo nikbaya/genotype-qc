@@ -18,13 +18,13 @@
 #$ -V
 #$ -pe shmem 20
 #$ -P lindgren.prjc
-#$ -t 2-23
+#$ -t 24
 
 readonly CHR=${SGE_TASK_ID}
 
 if [ ${CHR} -eq 23 ]; then
   CHR="X"
-elif [ ${CHR} -eq 24 ] then
+elif [ ${CHR} -eq 24 ]; then
   CHR="Y"
 fi
 
@@ -48,11 +48,9 @@ vcf_check() {
   if [ ! -f $1 ]; then
     >&2 time_check "Error: $1 does not exist. Exiting.\n"
     exit 1
-  else
-    if [ $( bcftools view $1 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
-      >&2 time_check "Error: $1 may be truncated. Exiting.\n"
-      exit 1
-    fi
+  elif [ $( bcftools view $1 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
+    >&2 time_check "Error: $1 may be truncated. Exiting.\n"
+    exit 1
   fi
 }
 
