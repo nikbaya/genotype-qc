@@ -20,7 +20,7 @@ readonly MERGELIST=${WD}/mergelist.txt
 readonly OUT=${WD}/ukb_wes_200k_pre_qc
 
 plink_files_exist() {
-  [ ` ls -1 $1.{bed,bim,fam} | wc -l ` -eq 3 ]
+  [ ` ls -1 $1.{bed,bim,fam} 2> /dev/null | wc -l ` -eq 3 ]
 }
 
 # create merge list file
@@ -31,23 +31,34 @@ if [ ! -f ${MERGELIST} ]; then
     elif [ ${chr} -eq 24 ]; then
       chr="Y"
     fi
-    echo "${BFILE}${CHR}" >> ${MERGELIST}
+    if plink_files_exist ${BFILE}${CHR}; then
+      echo "${BFILE}${CHR}" >> ${MERGELIST}
+    fi
   done
 else
   echo "Warning: ${MERGELIST} already exists, skipping file creation"
+  while read line; do
+    if ! plink_files_exist ${line}; then
+      echo -e "Error: ${line}.{bed,bim,fam} files do not exist.\nPlease double-check the contents of ${MERGELIST}"
+      exit 1
+    fi
+  done < ${MERGELIST}
 fi
 
 echo -e "\nstarting plink merge (job id: ${JOB_ID}, $( date ))\n"
 cat ${MERGELIST}
 
+exit 0
+
 if ! plink_files_exist ${OUT}; then
   plink --merge-list ${MERGELIST} \
     --make-bed \
-    --memory 80000 \
+    --memory 160000 \
     --out ${OUT}
   if ! plink_files_exist ${OUT}; then
     echo "Error: ${OUT}.{bed,bim,fam} was not successfully written."
     exit 1
+  fi
 else
   echo "Warning: ${OUT}.{bed,bim,fam} already exist, skipping PLINK merge"
 fi
