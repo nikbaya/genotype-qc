@@ -40,7 +40,7 @@ if [ ! -f ${OUT}.bed ]; then
     --make-bed \
     --memory 80000 \
     --out ${OUT}
-  if [ -f ${OUT}.bed ]; then
+  if [ ! -f ${OUT}.bed ]; then
     echo "Error: ${OUT}.bed was not successfully written."
     exit 1
 else
