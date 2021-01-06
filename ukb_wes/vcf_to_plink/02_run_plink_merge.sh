@@ -15,18 +15,23 @@
 
 readonly WD=/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/plink
 
+readonly BFILE=${WD}/ukb_wes_200k_chr
 readonly MERGELIST=${WD}/mergelist.txt
 readonly OUT=${WD}/ukb_wes_200k_pre_qc
+
+plink_files_exist() {
+  [ ` ls -1 $1.{bed,bim,fam} | wc -l ` -eq 3 ]
+}
 
 # create merge list file
 if [ ! -f ${MERGELIST} ]; then
   for chr in {1..24}; do
-    if [ $chr -eq 23 ]; then
+    if [ ${chr} -eq 23 ]; then
       chr="X"
-    elif [ $chr -eq 24 ]; then
+    elif [ ${chr} -eq 24 ]; then
       chr="Y"
     fi
-    echo "ukb_wes_chr${chr}" >> ${MERGELIST}
+    echo "${BFILE}${CHR}" >> ${MERGELIST}
   done
 else
   echo "Warning: ${MERGELIST} already exists, skipping file creation"
@@ -35,14 +40,14 @@ fi
 echo -e "\nstarting plink merge (job id: ${JOB_ID}, $( date ))\n"
 cat ${MERGELIST}
 
-if [ ! -f ${OUT}.bed ]; then
+if ! plink_files_exist ${OUT}; then
   plink --merge-list ${MERGELIST} \
     --make-bed \
     --memory 80000 \
     --out ${OUT}
-  if [ ! -f ${OUT}.bed ]; then
-    echo "Error: ${OUT}.bed was not successfully written."
+  if ! plink_files_exist ${OUT}; then
+    echo "Error: ${OUT}.{bed,bim,fam} was not successfully written."
     exit 1
 else
-  echo "Warning: ${OUT}.bed already exists, skipping PLINK merge"
+  echo "Warning: ${OUT}.{bed,bim,fam} already exist, skipping PLINK merge"
 fi
