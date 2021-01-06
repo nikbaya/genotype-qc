@@ -8,7 +8,7 @@
 # 2) VCF is converted to PLINK
 # 3) Variant IDs are updated
 #
-# Author: Nik Baya (2021-01-01)
+# Author: Nik Baya (2021-01-05)
 #
 #$ -N vcf_to_plink
 #$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/scripts/vcf_to_plink.log
@@ -20,13 +20,14 @@
 #$ -P lindgren.prjc
 #$ -t 24
 
-readonly CHR=${SGE_TASK_ID}
+CHR=${SGE_TASK_ID}
 
 if [ ${CHR} -eq 23 ]; then
   CHR="X"
 elif [ ${CHR} -eq 24 ]; then
   CHR="Y"
 fi
+readonly CHR
 
 readonly WD=/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink
 
@@ -41,6 +42,10 @@ readonly BFILE=${WD}/plink/${PREFIX} # PLINK bfile prefix
 
 time_check() {
   echo -e "\n########\n$1 (job id: ${JOB_ID}.${SGE_TASK_ID}, $(date))\n########"
+}
+
+elapsed_time() {
+  echo "elapsed time: $(($1 / 3600)) hrs $(( ($1 % 3600) / 60 )) min $(( $1 % 60 )) sec"
 }
 
 # check that VCFs are not truncated
@@ -59,9 +64,11 @@ time_check "chr${CHR} start"
 if [ ! -f ${TMP_VCF} ]; then
   vcf_check ${VCF}
   time_check "chr${CHR} start temporary VCF writing"
+  SECONDS=0
   bcftools norm -Oz -f ${FASTA} -m -any --threads 20 -o ${TMP_VCF} ${VCF}
   vcf_check ${TMP_VCF}
-  time_check "chr${CHR} temporary VCF finished writing"
+  duration=${SECONDS}
+  time_check "chr${CHR} temporary VCF finished writing, $( elapsed_time ${duration} )"
 else
   vcf_check ${TMP_VCF}
   time_check "Warning: ${TMP_VCF} already exists, skipping multiallelic split and indel normalisation"
@@ -70,6 +77,7 @@ fi
 # NOTE: We only check for the bed file for simplicity
 if [ ! -f ${BFILE}.bed ]; then
   time_check "chr${CHR} start PLINK files writing"
+  SECONDS=0
   plink2 --vcf ${TMP_VCF} \
     --keep-allele-order \
     --double-id \
@@ -79,7 +87,8 @@ if [ ! -f ${BFILE}.bed ]; then
    --out ${BFILE}
 
   if [ -f ${BFILE}.bed ]; then
-    time_check "chr${CHR} PLINK files finished writing"
+    duration=${SECONDS}
+    time_check "chr${CHR} PLINK files finished writing, $( elapsed_time ${duration} )"
   else
     >&2 time_check "Error: chr${CHR} PLINK files were not written successfully. Exiting.\n"
     exit 1
