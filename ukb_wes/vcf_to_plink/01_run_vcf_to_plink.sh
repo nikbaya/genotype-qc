@@ -45,7 +45,7 @@ time_check() {
 }
 
 elapsed_time() {
-  echo "elapsed time: $(($1 / 3600)) hrs $(( ($1 % 3600) / 60 )) min $(( $1 % 60 )) sec"
+  echo "elapsed time: $( echo "scale=2; $1/3600" | bc -l ) hrs"
 }
 
 # check that VCFs are not truncated
