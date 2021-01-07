@@ -23,6 +23,11 @@ plink_files_exist() {
   [ ` ls -1 $1.{bed,bim,fam} 2> /dev/null | wc -l ` -eq 3 ]
 }
 
+raise_error() {
+  >&2 echo -e "Error: $1. Exiting."
+  exit 1
+}
+
 # create merge list file
 if [ ! -f ${MERGELIST} ]; then
   for chr in {1..24}; do
@@ -34,8 +39,7 @@ if [ ! -f ${MERGELIST} ]; then
     if plink_files_exist ${BFILE}${chr}; then
       echo "${BFILE}${chr}" >> ${MERGELIST}
     else
-      echo "Error: ${BFILE}${chr}.{bed,bim,fam} files are not successfully written. Exiting."
-      exit 1
+      raise_error "${BFILE}${chr}.{bed,bim,fam} files are not successfully written."
     fi
   done
 else
@@ -43,8 +47,7 @@ else
   # if merge list exists, check that each entry is a valid bfile before proceeding
   while read line; do
     if ! plink_files_exist ${line}; then
-      echo -e "Error: ${line}.{bed,bim,fam} files do not exist.\nPlease double-check the contents of ${MERGELIST}"
-      exit 1
+      raise_error "${line}.{bed,bim,fam} files do not exist.\nPlease double-check the contents of ${MERGELIST}"
     fi
   done < ${MERGELIST}
 fi
@@ -60,8 +63,7 @@ if ! plink_files_exist ${OUT}; then
     --memory 160000 \
     --out ${OUT}
   if ! plink_files_exist ${OUT}; then
-    echo "Error: ${OUT}.{bed,bim,fam} was not successfully written."
-    exit 1
+    raise_error "${OUT}.{bed,bim,fam} was not successfully written."
   fi
 else
   echo "Warning: ${OUT}.{bed,bim,fam} already exist, skipping PLINK merge"
