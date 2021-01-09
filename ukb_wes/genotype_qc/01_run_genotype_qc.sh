@@ -8,18 +8,17 @@
 #$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/genotype_qc/scripts/genotype_qc.log
 #$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/genotype_qc/scripts/genotype_qc.errors.log
 #$ -q short.qf
-#$ -l h_rt=00:05:00
-#$ -pe shmem 1
+#$ -pe shmem 40
 #$ -V
 #$ -P lindgren.prjc
 
 # input
-readonly BFILE=/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/plink/ukb_wes_200k_pre_qc
+readonly BFILE="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/plink/ukb_wes_200k_pre_qc"
 
 # output
-readonly WD=/well/lindgren/UKBIOBANK/nbaya/wes_200k/genotype_qc/plink
-readonly TMP=${WD}/tmp-ukb_wes_200k
-readonly OUT=${WD}/ukb_wes_200k
+readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/genotype_qc/plink"
+readonly TMP="${WD}/tmp-ukb_wes_200k"
+readonly OUT="${WD}/ukb_wes_200k"
 
 # filter parameters
 # NOTE: We choose less stringent filters than the default to only remove the truly bad outliers
@@ -40,7 +39,7 @@ check_plink_files() {
 check_plink_files ${BFILE}
 
 echo -e "\n###########
-starting genotype qc (job id: ${JOB_ID}.${SGE_TASK_ID}, $(date))
+Starting genotype qc (job id: ${JOB_ID}.${SGE_TASK_ID}, $(date))
 
 BFILE: ${BFILE}
 TMP:   ${TMP}
@@ -53,16 +52,28 @@ GENO2: ${GENO2}
 
 SECONDS=0
 
-## SNP call rate 1st pass filtering
-echo "...SNP call rate 1st pass filtering ($GENO1)..."
+## remove withdrawn samples
+readonly WITHDRAWN="${WD}/withdrawn_samples.txt"
+if [ ! -f ${WITHDRAWN} ]; then
+  awk '{ print $1,$2 }' ${BFILE}.fam | grep "-" > ${WITHDRAWN}
+fi
+echo "Removing withdrawn samples (n=$( cat ${WITHDRAWN} | wc -l))"
 plink --bfile ${BFILE} \
+  --remove ${WITHDRAWN} \
+  --make-bed \
+  --out ${TMP}_rm_withdrawn
+check_plink_files ${TMP}_rm_withdrawn
+
+## SNP call rate 1st pass filtering
+echo "Starting SNP call rate 1st pass filtering ($GENO1)"
+plink --bfile ${TMP}_ \
   --geno ${GENO1} \
   --make-bed \
   --out ${TMP}_geno1
 check_plink_files ${TMP}_geno
 
 ## Sample call rate filtering
-echo "...Sample call rate filtering ($MIND)..."
+echo "Starting sample call rate filtering ($MIND)"
 plink --bfile ${TMP}_geno1 \
   --mind ${MIND} \
   --make-bed \
@@ -70,10 +81,10 @@ plink --bfile ${TMP}_geno1 \
 check_plink_files ${TMP}_mind
 
 ## Inbreeding coefficient (Fhet)
-echo "...Sample inbreeding coefficient calculation ($FHET)..."
-plink --bfile ${TMP}_mind \
-  --het \
-  --out ${TMP}
+#echo "...Sample inbreeding coefficient calculation ($FHET)..."
+#plink --bfile ${TMP}_mind \
+#  --het \
+#  --out ${TMP}
 #awk -v FHET=${FHET} '{ if ($6 < -FHET || $6> FHET) print $1, $2, $6 }' ${TMP}.het > ${TMP}.remove.fhet.txt
 #plink --bfile ${TMP}_mind \
 #  --remove ${TMP}.remove.fhet.txt \
@@ -81,7 +92,7 @@ plink --bfile ${TMP}_mind \
 #  --out ${TMP}_fhet
 
 ## SNP call rate 2nd pass filtering
-echo "...SNP call rate 2nd pass filtering ($GENO2)..."
+echo "Starting SNP call rate 2nd pass filtering ($GENO2)"
 plink --bfile ${TMP}_mind \
   --geno ${GENO2} \
   --make-bed \
