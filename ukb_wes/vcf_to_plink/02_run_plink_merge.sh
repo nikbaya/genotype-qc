@@ -7,8 +7,8 @@
 #$ -N plink_merge
 #$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/scripts/plink_merge.log
 #$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/scripts/plink_merge.errors.log
-#$ -q long.qf
-#$ -l h_rt=10:00:00
+#$ -q short.qf
+##$ -l h_rt=10:00:00
 #$ -pe shmem 40
 #$ -V
 #$ -P lindgren.prjc
@@ -57,8 +57,16 @@ echo -e "Files to merge:\n$( cat ${MERGELIST} )"
 
 SECONDS=0
 
+# create list of withdrawn samples
+readonly WITHDRAWN="${WD}/withdrawn_samples.txt"
+if [ ! -f ${WITHDRAWN} ]; then
+  awk '{ print $1,$2 }' ${BFILE}1.fam | grep "-" > ${WITHDRAWN} # assume fam files are identical across chroms, so we can use the chr1.fam file
+fi
+echo "Removing withdrawn samples (n=$( cat ${WITHDRAWN} | wc -l))"
+
 if ! plink_files_exist ${OUT}; then
   plink --merge-list ${MERGELIST} \
+    --remove ${WITHDRAWN} \
     --make-bed \
     --memory 160000 \
     --out ${OUT}
