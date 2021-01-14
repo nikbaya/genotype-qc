@@ -19,10 +19,10 @@ def get_maf(df):
     return maf
 
 def main(args):
-    fname = args.frqx
-    df = pd.read_csv(f'{wd}/{fname}', compression='gzip', sep='\t')
+    path = args.frqx
+    df = pd.read_csv(path, compression='gzip', sep='\t')
     df['MAF'] = get_maf(df)
-    df.to_csv(f'{wd}/{fname.replace(".frqx",".frqx_v2")}', compression='gzip', index=False, sep='\t')
+    df.to_csv(f'{path.replace(".frqx",".frqx_v2")}', compression='gzip', index=False, sep='\t')
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
