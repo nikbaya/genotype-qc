@@ -8,7 +8,6 @@
 #$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/genotype_qc/scripts/genotype_qc.log
 #$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/genotype_qc/scripts/genotype_qc.errors.log
 #$ -q short.qf
-##$ -l h_rt=:00:00
 #$ -pe shmem 40
 #$ -V
 #$ -P lindgren.prjc
@@ -16,21 +15,23 @@
 readonly OVERWRITE=0 # 0 = false, 1 = true
 
 # input
-readonly BFILE="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/plink/ukb_wes_200k_pre_qc"
+#readonly BFILE="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/plink/ukb_wes_200k_pre_qc"
+readonly BFILE="/well/lindgren/UKBIOBANK/nbaya/wes_200k/genotype_qc/plink/ukb_wes_200k_pre_qc_eur"
+#readonly BFILE="/well/lindgren/UKBIOBANK/nbaya/wes_200k/genotype_qc/plink/ukb_wes_200k_pre_qc_wb"
 
 # output
 readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/genotype_qc/plink"
-readonly TMP="${WD}/tmp-ukb_wes_200k"
-readonly OUT="${WD}/ukb_wes_200k"
+readonly TMP="${WD}/tmp-test_v1.2_ukb_wes_200k_eur_clean"
+readonly OUT="${WD}/test_v1.2_ukb_wes_200k_eur_clean"
 
 # filter parameters
 # NOTE: We choose less stringent filters than the default to only remove the truly bad outliers
 readonly GENO1=0.10 # include only variants with missing-rate < $GENO1 (before sample filter), important for post merge of multiple platforms (default: 0.05)
 readonly MIND=0.10     # include only samples with missing-rate < $MIND (default: 0.02)
-#readonly FHET=0.2   # include only samples with -$FHET < FHET < $FHET (default: 0.2)
+readonly FHET=0.2   # include only samples with -$FHET < FHET < $FHET (default: 0.2)
 readonly GENO2=0.10     # include only variants with missing-rate < $GENO2 (default: 0.02)
-# HWE_TH=1e-10  # include only variants with HWE p-val > $HWE_TH
-# MAF=0.005     # include only variants with minor allele frequency < $MAF
+readonly HWE_TH=1e-10  # include only variants with HWE p-val > $HWE_TH (default: 1e-10)
+# MAF=0.005     # include only variants with minor allele frequency < $MAF (default: 0.005)
 
 time_check() {
   echo -e "\n########\n$1 (job id: ${JOB_ID}.${SGE_TASK_ID}, $(date))\n########"
@@ -70,7 +71,9 @@ OUT:   ${OUT}
 
 GENO1: ${GENO1}
 MIND:  ${MIND}
+FHET: ${FHET}
 GENO2: ${GENO2}
+HWE_TH: ${HWE_TH}
 ###########"
 
 SECONDS=0
@@ -91,21 +94,32 @@ plink --bfile ${TMP}_geno1 \
   --out ${TMP}_mind
 check_plink_files ${TMP}_mind
 
-## Inbreeding coefficient (Fhet)
-#echo "...Sample inbreeding coefficient calculation ($FHET)..."
-#plink --bfile ${TMP}_mind \
-#  --het \
-#  --out ${TMP}
-#awk -v FHET=${FHET} '{ if ($6 < -FHET || $6> FHET) print $1, $2, $6 }' ${TMP}.het > ${TMP}.remove.fhet.txt
-#plink --bfile ${TMP}_mind \
-#  --remove ${TMP}.remove.fhet.txt \
-#  --make-bed \
-#  --out ${TMP}_fhet
+# Inbreeding coefficient (Fhet)
+echo "Starting sample inbreeding coefficient calculation ($FHET)"
+plink --bfile ${TMP}_mind \
+  --maf 0.01 \
+  --autosome \
+  --het \
+  --out ${TMP}
+awk -v FHET=${FHET} '{ if ($6 < -FHET || $6> FHET) print $1, $2, $6 }' ${TMP}.het > ${TMP}.remove.fhet.txt
+plink --bfile ${TMP}_mind \
+  --remove ${TMP}.remove.fhet.txt \
+  --make-bed \
+  --out ${TMP}_fhet
+check_plink_files ${TMP}_fhet
 
 ## SNP call rate 2nd pass filtering
 echo "Starting SNP call rate 2nd pass filtering ($GENO2)"
-plink --bfile ${TMP}_mind \
+plink --bfile ${TMP}_fhet \
   --geno ${GENO2} \
+  --make-bed \
+  --out ${TMP}_geno2
+check_plink_files ${TMP}_geno2
+
+## HWE filtering
+echo "...SNP HWE filtering ($HWE_TH)..."
+plink --bfile ${TMP}_geno2 \
+  --hwe ${HWE_TH} \
   --make-bed \
   --out ${OUT}
 check_plink_files ${OUT}
