@@ -25,7 +25,7 @@ readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/test"
 #readonly IN="${WD}/tmp-ukb_wes_200k_chr${CHR}.vcf.gz"
 readonly IN=${WD}/test_ukb_wes_chr${CHR}.vcf.gz
 #readonly OUT="${WD}/test_full_200k_vqsr_chr${CHR}"
-readonly OUT=${WD}/test_ukb_chr${CHR}
+readonly OUT=${WD}/test_ukb_vqsr_chr${CHR}
 
 raise_error() {
   >&2 echo -e "Error: $1. Exiting."
@@ -108,22 +108,71 @@ vcf_check ${OUT}_sitesonly.vcf.gz
 make_index ${OUT}_sitesonly.vcf.gz
 
 readonly REF="/well/lindgren/UKBIOBANK/nbaya/resources/ref"
+readonly MAX_GAUSS=3
 
-if [ ! -f ${OUT}_recal_snp.tranches ]; then
+# SNPS
+readonly RECAL_SNP="${OUT}_snp_maxgauss${MAX_GAUSS}"
+
+if [ ! -f ${RECAL_SNP}.recal ]; then
 gatk --java-options "-Xmx${MEM}g -Xms${MEM}g" VariantRecalibrator \
    -V ${OUT}_sitesonly.vcf.gz \
    --trust-all-polymorphic \
    -tranche 100.0 -tranche 99.95 -tranche 99.9 -tranche 99.8 -tranche 99.6 -tranche 99.5 -tranche 99.4 -tranche 99.3 -tranche 99.0 -tranche 98.0 -tranche 97.0 -tranche 90.0 \
    -an QD -an FS -an SOR \
    -mode SNP \
-   --max-gaussians 4 \
+   --max-gaussians ${MAX_GAUSS} \
    -resource:hapmap,known=false,training=true,truth=true,prior=15 ${REF}/hapmap_3.3.hg38.vcf.gz \
    -resource:omni,known=false,training=true,truth=true,prior=12 ${REF}/1000G_omni2.5.hg38.vcf.gz \
    -resource:1000G,known=false,training=true,truth=false,prior=10 ${REF}/1000G_phase1.snps.high_confidence.hg38.vcf.gz \
    -resource:dbsnp,known=true,training=false,truth=false,prior=7 ${REF}/Homo_sapiens_assembly38.dbsnp138.vcf \
-   -O ${OUT}_recal_snp \
-   --tranches-file ${OUT}_recal_snp.tranches
+   -O ${RECAL_SNP}.recal \
+   --tranches-file ${RECAL_SNP}.tranches
 fi
+
+if [ ! -f ${RECAL_SNP}.vcf.gz ]; then
+gatk --java-options "-Xmx${MEM}g -Xms${MEM}g" \
+    ApplyVQSR \
+    -V ${OUT}_filter_excesshet.vcf.gz \
+    --recal-file ${RECAL_SNP}.recal \
+    --tranches-file ${RECAL_SNP}.tranches \
+    --truth-sensitivity-filter-level 99.7 \
+    --create-output-variant-index true \
+    -mode SNP \
+    -O ${RECAL_SNP}.vcf.gz \
+fi
+
+vcf_check ${RECAL_SNP}.vcf.gz
+
+# INDELS
+readonly RECAL_INDEL="${OUT}_indel_maxgauss${MAX_GAUSS}"
+
+if [ ! -f ${RECAL_INDEL}.tranches ]; then
+gatk --java-options "-Xmx${MEM}g -Xms${MEM}g" VariantRecalibrator \
+    -V cohort_sitesonly.vcf.gz \
+    --trust-all-polymorphic \
+    -tranche 100.0 -tranche 99.95 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 97.0 -tranche 96.0 -tranche 95.0 -tranche 94.0 -tranche 93.5 -tranche 93.0 -tranche 92.0 -tranche 91.0 -tranche 90.0 \
+    -an FS -an QD -an SOR \
+    -mode INDEL \
+    --max-gaussians ${MAX_GAUSS} \
+    -resource:mills,known=false,training=true,truth=true,prior=12 ${REF}/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz \
+    -resource:axiomPoly,known=false,training=true,truth=false,prior=10 ${REF}/Axiom_Exome_Plus.genotypes.all_populations.poly.hg38.vcf.gz \
+    -resource:dbsnp,known=true,training=false,truth=false,prior=2 ${REF}/Homo_sapiens_assembly38.dbsnp138.vcf \
+    -O ${RECAL_INDEL}.recal \
+    --tranches-file ${RECAL_INDEL}.tranches
+fi
+
+if [ ! -f ${OUT}_recal.vcf.gz ]; then
+gatk --java-options "-Xmx${MEM}g -Xms${MEM}g" \
+    ApplyVQSR \
+    -V ${RECAL_SNP}.vcf.gz \
+    --recal-file ${RECAL_INDEL}.recal \
+    --tranches-file ${RECAL_INDEL}.tranches \
+    --truth-sensitivity-filter-level 99.7 \
+    --create-output-variant-index true \
+    -mode INDEL \
+    -O ${OUT}_recal.vcf.gz
+fi
+
 
 duration=${SECONDS}
 echo "chr${CHR} finished, $( elapsed_time ${duration} ) (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
