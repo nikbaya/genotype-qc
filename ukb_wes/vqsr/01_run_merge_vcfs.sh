@@ -7,7 +7,7 @@
 #$ -N merge_vcfs
 #$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/merge_vcfs.log
 #$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/merge_vcfs.errors.log
-#$ -q long.qf
+#$ -q short.qf
 #$ -pe shmem 40
 #$ -V
 #$ -P lindgren.prjc
