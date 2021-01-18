@@ -70,8 +70,6 @@ make_index ${IN}
 module load GATK/4.1.7.0-GCCcore-8.3.0-Java-11
 module load R/3.6.2-foss-2019b
 
-readonly RSCRIPT="/apps/eb/skylake/software/R/3.6.2-foss-2019b/bin/Rscript"
-
 #if [ ! -f ${OUT}_annot.vcf.gz ]; then
 #gatk --java-options "-Xmx${MEM}g -Xms${MEM}g" VariantAnnotator \
 #  -V ${IN} \
@@ -126,7 +124,7 @@ gatk --java-options "-Xmx${MEM}g -Xms${MEM}g" VariantRecalibrator \
    -an QD -an FS -an SOR \
    -mode SNP \
    --max-gaussians ${MAX_GAUSS} \
-   --rscript-file ${RSCRIPT} \
+   --rscript-file ${RECAL_SNP}_plots.R \
    -resource:hapmap,known=false,training=true,truth=true,prior=15 ${REF}/hapmap_3.3.hg38.vcf.gz \
    -resource:omni,known=false,training=true,truth=true,prior=12 ${REF}/1000G_omni2.5.hg38.vcf.gz \
    -resource:1000G,known=false,training=true,truth=false,prior=10 ${REF}/1000G_phase1.snps.high_confidence.hg38.vcf.gz \
@@ -159,7 +157,7 @@ gatk --java-options "-Xmx${MEM}g -Xms${MEM}g" VariantRecalibrator \
     -an FS -an QD -an SOR \
     -mode INDEL \
     --max-gaussians ${MAX_GAUSS} \
-    --rscript-file ${RSCRIPT} \
+    --rscript-file ${RECAL_INDEL}_plots.R \
     -resource:mills,known=false,training=true,truth=true,prior=12 ${REF}/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz \
     -resource:axiomPoly,known=false,training=true,truth=false,prior=10 ${REF}/Axiom_Exome_Plus.genotypes.all_populations.poly.hg38.vcf.gz \
     -resource:dbsnp,known=true,training=false,truth=false,prior=2 ${REF}/Homo_sapiens_assembly38.dbsnp138.vcf \
