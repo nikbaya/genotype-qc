@@ -25,8 +25,6 @@ readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr"
 readonly OUT="${WD}/vcf/scatter_annot_chr${CHR}" # output directory
 readonly ANNOT_CHUNK_SCRIPT="${WD}/scripts/_run_annot_chunk.sh"
 
-SECONDS=0
-
 # split unique base pair positons of variants into equal chunks
 readonly BIM="/well/ukbb-wes/calls/oqfe/ukbb-wes-oqfe-calls-chr${CHR}.bim"
 readonly MAX_CHUNK_SIZE=10000 # maximum number of base pair positions per chunk
@@ -48,7 +46,4 @@ done < <( ls -1 ${SPLIT_PREFIX}* )
 
 N_CHUNKS=$( cat ${INTERVALS} | wc -l )
 
-qsub -t 1:${N_CHUNKS} ${ANNOT_CHUNK_SCRIPT} ${CHR}
-
-duration=${SECONDS}
-echo "chr${CHR} scatter_annot finished, $( elapsed_time ${duration} ) (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
+qsub -t 1:${N_CHUNKS} ${ANNOT_CHUNK_SCRIPT} ${CHR} ${OUT}
