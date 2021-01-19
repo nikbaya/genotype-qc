@@ -10,7 +10,7 @@
 #$ -q test.qc
 #$ -V
 #$ -P lindgren.prjc
-#$ -t 23-24
+#$ -t 9-12
 
 CHR=${SGE_TASK_ID}
 
@@ -52,6 +52,6 @@ fi
 readonly QUEUE="short.qe" # queue to use for scattered annotation (default: short.qf)
 readonly N_CORES=1 # number of cores (or "slots") to use (default: 1)
 readonly N_CHUNKS=$( cat ${INTERVALS} | wc -l ) # number of chunks (i.e. intervals) for the given chromosome
-readonly MEM=15 # memory in gb used for gat (default: 4 for 1 qc core, 8 for 2 qf cores)
+readonly MEM=10 # memory in gb used for gat (default: 4 for 1 qc core, 8 for 2 qf cores)
 
-qsub -q ${QUEUE} -pe shmem ${N_CORES} -t 1:${N_CHUNKS} -N "_c${CHR}_annot_chunk" ${ANNOT_CHUNK_SCRIPT} ${CHR} ${OUT} ${MEM}
+qsub -q ${QUEUE} -pe shmem ${N_CORES} -t 1:${N_CHUNKS} -N "_c${CHR}_annot_chunk" ${ANNOT_CHUNK_SCRIPT} ${CHR} ${OUT} ${INTERVALS} ${MEM}
