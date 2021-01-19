@@ -46,4 +46,4 @@ done < <( ls -1 ${SPLIT_PREFIX}* )
 
 N_CHUNKS=$( cat ${INTERVALS} | wc -l )
 
-qsub -t 1:${N_CHUNKS} ${ANNOT_CHUNK_SCRIPT} ${CHR} ${OUT}
+qsub -q short.qf -pe shmem 2 -t 1:${N_CHUNKS} ${ANNOT_CHUNK_SCRIPT} ${CHR} ${OUT} ${MEM}
