@@ -10,7 +10,7 @@
 #$ -q test.qc
 #$ -V
 #$ -P lindgren.prjc
-#$ -t 9-12
+#$ -t 1-24
 
 CHR=${SGE_TASK_ID}
 
