@@ -21,6 +21,7 @@ readonly CHR
 
 readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/test"
 readonly OUT="${WD}/test_scatter_annot_chr${CHR}" # output directory
+readonly ANNOT_CHUNK_SCRIPT="${WD}/_test_run_annot_chunk.sh"
 
 SECONDS=0
 
@@ -45,7 +46,7 @@ done < <( ls -1 ${SPLIT_PREFIX}* )
 
 N_CHUNKS=$( cat ${INTERVALS} | wc -l )
 
-qsub -t 1:${N_CHUNKS} _run_annot_chunk.sh ${OUT}
+qsub -t 1:${N_CHUNKS} ${ANNOT_CHUNK_SCRIPT} ${CHR}
 
 duration=${SECONDS}
 echo "chr${CHR} scatter_annot finished, $( elapsed_time ${duration} ) (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
