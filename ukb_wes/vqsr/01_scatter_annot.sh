@@ -10,7 +10,7 @@
 #$ -q test.qc
 #$ -V
 #$ -P lindgren.prjc
-#$ -t 1-24
+#$ -t 14-24
 
 CHR=${SGE_TASK_ID}
 
@@ -44,6 +44,9 @@ while read split_file; do
   echo ${interval} >> ${INTERVALS}
 done < <( ls -1 ${SPLIT_PREFIX}* )
 
-N_CHUNKS=$( cat ${INTERVALS} | wc -l )
+readonly QUEUE="short.qf" # queue to use for scattered annotation
+readonly N_CORES=2 # number of cores (or "slots") to use
+readonly N_CHUNKS=$( cat ${INTERVALS} | wc -l ) # number of chunks (i.e. intervals) for the given chromosome
+readonly MEM=8 # memory in gb used for gat (default: 4 for 1 core on qf)
 
-qsub -q short.qf -pe shmem 2 -t 1:${N_CHUNKS} ${ANNOT_CHUNK_SCRIPT} ${CHR} ${OUT} ${MEM}
+qsub -q ${QUEUE} -pe shmem ${N_CORES} -t 1:${N_CHUNKS} ${ANNOT_CHUNK_SCRIPT} ${CHR} ${OUT} ${MEM}
