@@ -4,9 +4,9 @@
 #
 # Author: Nik Baya (2021-01-16)
 #
-#$ -N _test_annot_chunk
-#$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/test/test_annot_chunk.log
-#$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/test/test_annot_chunk.errors.log
+#$ -N _annot_chunk
+#$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/annot_chunk.log
+#$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/annot_chunk.errors.log
 #$ -q short.qf
 #$ -pe shmem 2
 #$ -V
@@ -19,7 +19,7 @@ readonly CHR=$1 # take CHR as argumen
 
 readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/test"
 readonly IN="${WD}/ukbb-wes-oqfe-pvcf-chr${CHR}.vcf.gz"
-readonly OUT="${WD}/test_scatter_annot_chr${CHR}" # output directory
+readonly OUT="${WD}/vcf/scatter_annot_chr${CHR}" # output directory
 readonly OUT_CHUNK="${OUT}/ukb_wes_oqfe_pvcf_chr${CHR}.${CHUNK_IDX}of${SGE_TASK_LAST}.vcf.gz" # VCF of chunk output
 
 raise_error() {
