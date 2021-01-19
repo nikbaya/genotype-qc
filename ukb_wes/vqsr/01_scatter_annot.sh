@@ -10,7 +10,7 @@
 #$ -q test.qc
 #$ -V
 #$ -P lindgren.prjc
-#$ -t 13
+#$ -t 23-24
 
 CHR=${SGE_TASK_ID}
 
@@ -43,11 +43,15 @@ if [ ! -f ${INTERVALS} ]; then
     interval=$( paste <( head -1 $split_file ) <( tail -n1 $split_file | cut -f2 ) | awk '{ print "chr"$1":"$2"-"$3 }' )
     echo ${interval} >> ${INTERVALS}
   done < <( ls -1 ${SPLIT_PREFIX}* )
+
+  if [[  "${CHR}" = "X" || "${CHR}" = "Y" ]]; then
+    sed -i "s/chr${SGE_TASK_ID}/chr${CHR}/g" ${INTERVALS} # note that SGE_TASK_ID is 23 or 24 for chr X and Y, respectively
+  fi
 fi
 
-readonly QUEUE="short.qf" # queue to use for scattered annotation (default: short.qf)
+readonly QUEUE="short.qe" # queue to use for scattered annotation (default: short.qf)
 readonly N_CORES=1 # number of cores (or "slots") to use (default: 1)
 readonly N_CHUNKS=$( cat ${INTERVALS} | wc -l ) # number of chunks (i.e. intervals) for the given chromosome
-readonly MEM=4 # memory in gb used for gat (default: 4 for 1 qc core, 8 for 2 qf cores)
+readonly MEM=15 # memory in gb used for gat (default: 4 for 1 qc core, 8 for 2 qf cores)
 
-qsub -q ${QUEUE} -pe shmem ${N_CORES} -t 1:${N_CHUNKS} ${ANNOT_CHUNK_SCRIPT} ${CHR} ${OUT} ${MEM}
+qsub -q ${QUEUE} -pe shmem ${N_CORES} -t 1:${N_CHUNKS} -N "_c${CHR}_annot_chunk" ${ANNOT_CHUNK_SCRIPT} ${CHR} ${OUT} ${MEM}
