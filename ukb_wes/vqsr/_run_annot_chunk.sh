@@ -62,7 +62,7 @@ if [ ! -f ${OUT_CHUNK} ]; then
   readonly EXIT_CODE=$?
 
   if [ ${EXIT_CODE} -ne 0 ]; then
-    raise_error "GATK VariantAnnotator had exit code ${EXIT_CODE}"
+    raise_error "GATK VariantAnnotator had exit code ${EXIT_CODE} (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
   fi
 fi
 
