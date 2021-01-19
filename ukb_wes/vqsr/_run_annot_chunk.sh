@@ -7,19 +7,17 @@
 #$ -N _annot_chunk
 #$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/annot_chunk.log
 #$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/annot_chunk.errors.log
-#$ -q short.qf
-#$ -pe shmem 2
 #$ -V
 #$ -P lindgren.prjc
 
 module load GATK/4.1.7.0-GCCcore-8.3.0-Java-11
 
 readonly CHUNK_IDX=${SGE_TASK_ID}
-readonly CHR=$1 # take CHR as argumen
+readonly CHR=${1?Error: _run_annot_chunk.sh requires the chromosome as 1st arg} # take CHR as argumen
+readonly OUT=${2?Error: _run_annot_chunk.sh requires the output directory as 2nd arg} # output directory
+readonly MEM=${3?Error: _run_annot_chunk.sh requires the GATK memory limit as 3rd arg} # memory in gb used for gat
 
-readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/test"
-readonly IN="${WD}/ukbb-wes-oqfe-pvcf-chr${CHR}.vcf.gz"
-readonly OUT="${WD}/vcf/scatter_annot_chr${CHR}" # output directory
+readonly IN="/well/ukbb-wes/pvcf/oqfe/ukbb-wes-oqfe-pvcf-chr${CHR}.vcf.gz"
 readonly OUT_CHUNK="${OUT}/ukb_wes_oqfe_pvcf_chr${CHR}.${CHUNK_IDX}of${SGE_TASK_LAST}.vcf.gz" # VCF of chunk output
 
 raise_error() {
@@ -29,11 +27,9 @@ raise_error() {
 
 vcf_check() {
   if [ ! -f $1 ]; then
-    >&2 raise_error "$1 does not exist."
-    exit 1
+    raise_error "$1 does not exist."
   elif [ $( bcftools view $1 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
-    >&2 raise_error "$1 may be truncated"
-    exit 1
+    raise_error "$1 may be truncated"
   fi
 }
 
@@ -46,13 +42,18 @@ vcf_check ${IN}
 SECONDS=0
 
 readonly INTERVALS="${OUT}/intervals_chr${CHR}.txt" # intervals file
-readonly INTERVAL=$( sed "${CHUNK_IDX}q;d"  ${INTERVALS} )
 
-echo "starting ${INTERVAL} (${CHUNK_IDX}/${SGE_TASK_LAST})"
+if [ -f ${INTERVALS} ]; then
+  readonly INTERVAL=$( sed "${CHUNK_IDX}q;d"  ${INTERVALS} )
+else
+  raise_error "${INTERVALS} file does not exist."
+fi
 
-readonly MEM=8 # memory in gb used for gatk
+echo "starting ${INTERVAL} (${CHUNK_IDX}/${SGE_TASK_LAST}) (GATK mem: ${MEM}g, job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
 
 if [ ! -f ${OUT_CHUNK} ]; then
+
+  set -x
   gatk --java-options "-Xmx${MEM}g -Xms${MEM}g" VariantAnnotator \
     -V ${IN} \
     -L ${INTERVAL} \
@@ -60,9 +61,11 @@ if [ ! -f ${OUT_CHUNK} ]; then
     -O ${OUT_CHUNK}
 
   readonly EXIT_CODE=$?
+  set +x
 
   if [ ${EXIT_CODE} -ne 0 ]; then
-    raise_error "GATK VariantAnnotator had exit code ${EXIT_CODE} (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
+    mv ${OUT_CHUNK} ${OUT_CHUNK}-failed
+    raise_error "GATK VariantAnnotator had exit code ${EXIT_CODE}, failed output file has been tagged (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
   fi
 fi
 
