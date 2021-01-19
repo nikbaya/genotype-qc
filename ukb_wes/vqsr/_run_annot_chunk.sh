@@ -57,6 +57,7 @@ readonly OUT_FAILED="${OUT_CHUNK}-failed" # path for failed output VCF
 
 if [ -f ${OUT_FAILED} ]; then
   echo "Removing existing failed file: ${OUT_FAILED}"
+  rm ${OUT_FAILED}
 fi
 
 if [ ! -f ${OUT_CHUNK} ]; then
