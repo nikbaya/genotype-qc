@@ -10,7 +10,7 @@
 #$ -q test.qc
 #$ -V
 #$ -P lindgren.prjc
-#$ -t 14-24
+#$ -t 13
 
 CHR=${SGE_TASK_ID}
 
@@ -37,16 +37,17 @@ split -l ${MAX_CHUNK_SIZE} <( cut -f1,4 ${BIM} | uniq ) ${SPLIT_PREFIX}
 # create intervals
 readonly INTERVALS="${OUT}/intervals_chr${CHR}.txt"
 
-rm ${INTERVALS} 2> /dev/null # remove file if it exists
-# iterate through the list of split files
-while read split_file; do
-  interval=$( paste <( head -1 $split_file ) <( tail -n1 $split_file | cut -f2 ) | awk '{ print "chr"$1":"$2"-"$3 }' )
-  echo ${interval} >> ${INTERVALS}
-done < <( ls -1 ${SPLIT_PREFIX}* )
+if [ ! -f ${INTERVALS} ]; then
+  # iterate through the list of split files
+  while read split_file; do
+    interval=$( paste <( head -1 $split_file ) <( tail -n1 $split_file | cut -f2 ) | awk '{ print "chr"$1":"$2"-"$3 }' )
+    echo ${interval} >> ${INTERVALS}
+  done < <( ls -1 ${SPLIT_PREFIX}* )
+fi
 
-readonly QUEUE="short.qf" # queue to use for scattered annotation
-readonly N_CORES=2 # number of cores (or "slots") to use
+readonly QUEUE="short.qe" # queue to use for scattered annotation (default: short.qf)
+readonly N_CORES=2 # number of cores (or "slots") to use (default: 1)
 readonly N_CHUNKS=$( cat ${INTERVALS} | wc -l ) # number of chunks (i.e. intervals) for the given chromosome
-readonly MEM=8 # memory in gb used for gat (default: 4 for 1 core on qf)
+readonly MEM=8 # memory in gb used for gat (default: 4 for 1 qc core, 8 for 2 qf cores)
 
 qsub -q ${QUEUE} -pe shmem ${N_CORES} -t 1:${N_CHUNKS} ${ANNOT_CHUNK_SCRIPT} ${CHR} ${OUT} ${MEM}
