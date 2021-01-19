@@ -28,7 +28,7 @@ raise_error() {
 vcf_check() {
   if [ ! -f $1 ]; then
     raise_error "$1 does not exist."
-  elif [ $( bcftools view $1 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
+  elif [ $( bcftools view -h $1 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
     raise_error "$1 may be truncated"
   fi
 }
@@ -59,11 +59,9 @@ if [ ! -f ${OUT_CHUNK} ]; then
     -L ${INTERVAL} \
     -A ExcessHet -A InbreedingCoeff -A StrandOddsRatio -A QualByDepth -A FisherStrand \
     -O ${OUT_CHUNK}
-
-  readonly EXIT_CODE=$?
   set +x
 
-  if [ ${EXIT_CODE} -ne 0 ]; then
+  if [ $( bcftools view -h ${OUT_CHUNK} 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
     mv ${OUT_CHUNK} ${OUT_CHUNK}-failed
     raise_error "GATK VariantAnnotator had exit code ${EXIT_CODE}, failed output file has been tagged (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
   fi
