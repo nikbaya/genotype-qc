@@ -18,6 +18,9 @@ readonly OUT=${2?Error: _run_annot_chunk.sh requires the output directory as 2nd
 readonly MEM=${3?Error: _run_annot_chunk.sh requires the GATK memory limit as 3rd arg} # memory in gb used for gat
 
 readonly IN="/well/ukbb-wes/pvcf/oqfe/ukbb-wes-oqfe-pvcf-chr${CHR}.vcf.gz"
+# NOTE: In the following .ped file parents have different FIDs than offspring, but since GATK only looks at whether
+# the PAT/MAT fields are both nonzero when determing founder status, the founders will still be identified correctly
+readonly PED="/gpfs3/well/lindgren/UKBIOBANK/nbaya/resources/ukb12788_simplified_gatk_pedigree.ped" # pedigree file
 readonly OUT_CHUNK="${OUT}/ukb_wes_oqfe_pvcf_chr${CHR}.${CHUNK_IDX}of${SGE_TASK_LAST}.vcf.gz" # VCF of chunk output
 
 raise_error() {
@@ -58,12 +61,13 @@ if [ ! -f ${OUT_CHUNK} ]; then
     -V ${IN} \
     -L ${INTERVAL} \
     -A ExcessHet -A InbreedingCoeff -A StrandOddsRatio -A QualByDepth -A FisherStrand \
+    -ped ${PED} \
     -O ${OUT_CHUNK}
   set +x
 
   if [ $( bcftools view -h ${OUT_CHUNK} 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
     mv ${OUT_CHUNK} ${OUT_CHUNK}-failed
-    raise_error "GATK VariantAnnotator had exit code ${EXIT_CODE}, failed output file has been tagged (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
+    raise_error "GATK VariantAnnotator did not successfully write output VCF, failed output VCF has been tagged with prefix \"-failed\" (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
   fi
 fi
 
