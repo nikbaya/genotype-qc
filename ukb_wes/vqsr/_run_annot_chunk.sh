@@ -16,7 +16,7 @@ readonly CHUNK_IDX=${SGE_TASK_ID}
 readonly CHR=${1?Error: _run_annot_chunk.sh requires the chromosome as 1st arg} # take CHR as argumen
 readonly OUT=${2?Error: _run_annot_chunk.sh requires the output directory as 2nd arg} # output directory
 readonly INTERVALS=${3?Error: _run_annot_chunk.sh requires the intervals file as 3rd arg} # intervals file
-readonly MEM=${3?Error: _run_annot_chunk.sh requires the GATK memory limit as 3rd arg} # memory in gb used for gat
+readonly MEM=${4?Error: _run_annot_chunk.sh requires the GATK memory limit as 4th arg} # memory in gb used for gat
 
 readonly IN="/well/ukbb-wes/pvcf/oqfe/ukbb-wes-oqfe-pvcf-chr${CHR}.vcf.gz"
 # NOTE: In the following .ped file parents have different FIDs than offspring, but since GATK only looks at whether
