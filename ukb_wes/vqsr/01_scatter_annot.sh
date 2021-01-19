@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 #
+# This script scatters the jobs of annotating chunks for each chromosome
+#
 # Author: Nik Baya (2021-01-19)
 #
-#$ -N test_scatter_annot
-#$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/test/test_scatter_annot.log
-#$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/test/test_scatter_annot.errors.log
+#$ -N scatter_annot
+#$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/scatter_annot.log
+#$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/scatter_annot.errors.log
 #$ -q test.qc
 #$ -V
 #$ -P lindgren.prjc
-#$ -t 13
+#$ -t 1-24
 
 CHR=${SGE_TASK_ID}
 
@@ -19,9 +21,9 @@ elif [ ${CHR} -eq 24 ]; then
 fi
 readonly CHR
 
-readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vcf_to_plink/test"
-readonly OUT="${WD}/test_scatter_annot_chr${CHR}" # output directory
-readonly ANNOT_CHUNK_SCRIPT="${WD}/_test_run_annot_chunk.sh"
+readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr"
+readonly OUT="${WD}/vcf/scatter_annot_chr${CHR}" # output directory
+readonly ANNOT_CHUNK_SCRIPT="${WD}/scripts/_run_annot_chunk.sh"
 
 SECONDS=0
 
