@@ -68,6 +68,7 @@ if [ ! -f ${OUT_CHUNK} ]; then
     -L ${INTERVAL} \
     -A ExcessHet -A InbreedingCoeff -A StrandOddsRatio -A QualByDepth -A FisherStrand \
     -ped ${PED} \
+    --sites-only-vcf-output \
     -O ${OUT_CHUNK}
   set +x
 
