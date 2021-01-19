@@ -27,18 +27,18 @@ raise_error() {
   exit 1
 }
 
-elapsed_time() {
-  echo "elapsed time: $( echo "scale=2; $1/3600" | bc -l ) hrs"
-}
-
 vcf_check() {
   if [ ! -f $1 ]; then
-    >&2 "Error: $1 does not exist. Exiting.\n"
+    >&2 raise_error "$1 does not exist."
     exit 1
   elif [ $( bcftools view $1 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
-    >&2 "Error: $1 may be truncated. Exiting.\n"
+    >&2 raise_error "$1 may be truncated"
     exit 1
   fi
+}
+
+elapsed_time() {
+  echo "elapsed time: $( echo "scale=2; $1/3600" | bc -l ) hrs"
 }
 
 vcf_check ${IN}
@@ -58,6 +58,12 @@ if [ ! -f ${OUT_CHUNK} ]; then
     -L ${INTERVAL} \
     -A ExcessHet -A InbreedingCoeff -A StrandOddsRatio -A QualByDepth -A FisherStrand \
     -O ${OUT_CHUNK}
+
+  readonly EXIT_CODE=$?
+
+  if [ ${EXIT_CODE} -ne 0 ]; then
+    raise_error "GATK VariantAnnotator had exit code ${EXIT_CODE}"
+  fi
 fi
 
 vcf_check ${OUT_CHUNK}
