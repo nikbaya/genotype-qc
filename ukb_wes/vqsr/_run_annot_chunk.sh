@@ -53,6 +53,12 @@ fi
 
 echo "starting ${INTERVAL} (${CHUNK_IDX}/${SGE_TASK_LAST}) (GATK mem: ${MEM}g, job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
 
+readonly OUT_FAILED="${OUT_CHUNK}-failed" # path for failed output VCF
+
+if [ -f ${OUT_FAILED} ]; then
+  echo "Removing existing failed file: ${OUT_FAILED}"
+fi
+
 if [ ! -f ${OUT_CHUNK} ]; then
 
   set -x
@@ -65,7 +71,7 @@ if [ ! -f ${OUT_CHUNK} ]; then
   set +x
 
   if [ $( bcftools view -h ${OUT_CHUNK} 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
-    mv ${OUT_CHUNK} ${OUT_CHUNK}-failed
+    mv ${OUT_CHUNK} ${OUT_FAILED}
     raise_error "GATK VariantAnnotator for chr${CHR} (${CHUNK_IDX}/${SGE_TASK_LAST}) did not successfully write output VCF, failed output VCF has been tagged with suffix \"-failed\" (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
   fi
 fi
