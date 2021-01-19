@@ -45,9 +45,9 @@ if [ ! -f ${INTERVALS} ]; then
   done < <( ls -1 ${SPLIT_PREFIX}* )
 fi
 
-readonly QUEUE="short.qe" # queue to use for scattered annotation (default: short.qf)
-readonly N_CORES=2 # number of cores (or "slots") to use (default: 1)
+readonly QUEUE="short.qf" # queue to use for scattered annotation (default: short.qf)
+readonly N_CORES=1 # number of cores (or "slots") to use (default: 1)
 readonly N_CHUNKS=$( cat ${INTERVALS} | wc -l ) # number of chunks (i.e. intervals) for the given chromosome
-readonly MEM=8 # memory in gb used for gat (default: 4 for 1 qc core, 8 for 2 qf cores)
+readonly MEM=4 # memory in gb used for gat (default: 4 for 1 qc core, 8 for 2 qf cores)
 
 qsub -q ${QUEUE} -pe shmem ${N_CORES} -t 1:${N_CHUNKS} ${ANNOT_CHUNK_SCRIPT} ${CHR} ${OUT} ${MEM}
