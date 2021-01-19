@@ -15,6 +15,7 @@ module load GATK/4.1.7.0-GCCcore-8.3.0-Java-11
 readonly CHUNK_IDX=${SGE_TASK_ID}
 readonly CHR=${1?Error: _run_annot_chunk.sh requires the chromosome as 1st arg} # take CHR as argumen
 readonly OUT=${2?Error: _run_annot_chunk.sh requires the output directory as 2nd arg} # output directory
+readonly INTERVALS=${3?Error: _run_annot_chunk.sh requires the intervals file as 3rd arg} # intervals file
 readonly MEM=${3?Error: _run_annot_chunk.sh requires the GATK memory limit as 3rd arg} # memory in gb used for gat
 
 readonly IN="/well/ukbb-wes/pvcf/oqfe/ukbb-wes-oqfe-pvcf-chr${CHR}.vcf.gz"
@@ -44,8 +45,6 @@ vcf_check ${IN}
 
 SECONDS=0
 
-readonly INTERVALS="${OUT}/intervals_chr${CHR}.txt" # intervals file
-
 if [ -f ${INTERVALS} ]; then
   readonly INTERVAL=$( sed "${CHUNK_IDX}q;d"  ${INTERVALS} )
 else
@@ -67,7 +66,7 @@ if [ ! -f ${OUT_CHUNK} ]; then
 
   if [ $( bcftools view -h ${OUT_CHUNK} 2>&1 | head | grep "No BGZF EOF marker" | wc -l ) -gt 0 ]; then
     mv ${OUT_CHUNK} ${OUT_CHUNK}-failed
-    raise_error "GATK VariantAnnotator did not successfully write output VCF, failed output VCF has been tagged with prefix \"-failed\" (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
+    raise_error "GATK VariantAnnotator for chr${CHR} (${CHUNK_IDX}/${SGE_TASK_LAST}) did not successfully write output VCF, failed output VCF has been tagged with suffix \"-failed\" (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
   fi
 fi
 
