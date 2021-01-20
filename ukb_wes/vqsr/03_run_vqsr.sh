@@ -42,7 +42,19 @@ readonly MAX_GAUSS_INDEL=4 # default: 4
 readonly RECAL_SNP="${WD}/ukb_wes_${SUBSET}_snp_maxgauss${MAX_GAUSS_SNP}"
 readonly RECAL_INDEL="${WD}/ukb_wes_${SUBSET}_indel_maxgauss${MAX_GAUSS_INDEL}"
 
-readonly MEM=30 # memory in GB used for GATK Java options
+# queues to be used by jobs submitted by this script
+readonly QUEUE_RECAL="long.qf"
+readonly QUEUE_APPLY="long.qf"
+
+# number of cores
+readonly N_CORES_RECAL=
+
+# memory to be used by GATK as Java limits during various parts of the pipeline
+# NOTE: MEM_RECAL and MEM_APPLY should depend on what queues and numbers of cores are specified above
+
+readonly MEM_EXCESSHET=30
+readonly MEM_RECAL=20
+readonly MEM_APPLY=10
 
 time_check() {
   echo -e "\n########\n$1 (job id: ${JOB_ID}.${SGE_TASK_ID}, $(date))\n########"
@@ -108,6 +120,57 @@ vcf_check ${TMP_EXCESSHET}
 
 # submit VariantRecalibrator jobs
 
+submit_recal() {
+  local VARIANT_TYPE=$1 # "snp" or "indel"
+  local RECAL_PATH=$2 # prefix for recal output
+  local MAX_GAUSS=$3 # max gaussian argument
+  if [ $( ls -1 ${RECAL_PATH}.{recal,tranches,recal.idx} ) -ne 3 ]; then
+    local JOB_NAME="_${SUBSET}_${VARIANT_TYPE}_recal"
+    qsub -N ${JOB_NAME} \
+      -q ${QUEUE_RECAL} \
+      -pe shmem ${N_CORES_RECAL} \
+      ${VARIANT_RECAL_SCRIPT} \
+      ${TMP_EXCESSHET} \
+      ${VARIANT_TYPE} \
+      ${RECAL_PATH} \
+      ${MAX_GAUSS} \
+      ${MEM_RECAL}
+  fi
+  echo ${JOB_NAME}
+}
+
+
+JOB_NAME_SNP=$( submit_recal "snp" ${RECAL_SNP} ${MAX_GAUSS_SNP} )
+JOB_NAME_INDEL=$( submit_recal "indel" ${RECAL_INDEL} ${MAX_GAUSS_INDEL} )
+
+
+# submit ApplyVQSR job
+qsub -N "_${SUBSET}_apply_vqsr" \
+  -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL}
+  -pe
 if [ $( ls -1 ${RECAL_SNP}.{recal,tranches,recal.idx ) -ne 3 ]; then
   time_check "Submitting SNP VariantRecalibrator job for ${SUBSET} cohort"
-  readonly SNP_JOB_ID=$( qsub -terse
+  queue="long.qf"
+  n_cores=10
+  SNP_JOB_NAME="_${SUBSET}_snp_recal"
+  qsub -N ${SNP_JOB_NAME} \
+    ${VARIANT_RECAL_SCRIPT} \
+    ${TMP_EXCESSHET} \
+    ${MAX_GAUSS_SNP} \
+    ${RECAL_SNP} \
+    ${MEM}
+fi
+
+f [ $( ls -1 ${RECAL_INDEL}.{recal,tranches,recal.idx ) -ne 3 ]; then
+  time_check "Submitting INDEL VariantRecalibrator job for ${SUBSET} cohort"
+  queue="long.qf"
+  n_cores=10
+  SNP_JOB_NAME="_${SUBSET}_snp_recal"
+  qsub -N ${SNP_JOB_NAME} \
+    ${VARIANT_RECAL_SCRIPT} \
+    ${TMP_EXCESSHET} \
+    ${MAX_GAUSS_SNP} \
+    ${RECAL_SNP} \
+    ${MEM}
+fi
+
