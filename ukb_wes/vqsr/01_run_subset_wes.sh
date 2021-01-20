@@ -45,6 +45,6 @@ if [ ! -f ${OUT}/${VCF_PREFIX}${subset}${VCF_SUFFIX} ]; then
   bcftools +split \
     -S ${SAMPLES} \
     ${IN} \
+    -Oz \
     -o ${OUT} \
-    --threads 20
 fi
