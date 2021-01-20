@@ -63,7 +63,8 @@ fi
 if [ ! -f ${OUT_CHUNK} ]; then
 
   set -x
-  gatk --java-options "-Xmx${MEM}g -Xms${MEM}g" VariantAnnotator \
+  gatk --java-options "-Xmx${MEM}g -Xms${MEM}g -XX:-UseParallelGC" \
+    VariantAnnotator \
     -V ${IN} \
     -L ${INTERVAL} \
     -A ExcessHet -A InbreedingCoeff -A StrandOddsRatio -A QualByDepth -A FisherStrand \
