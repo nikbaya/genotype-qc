@@ -15,7 +15,7 @@
 #$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/vqsr.log
 #$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/vqsr.errors.log
 #$ -q long.qf
-#$ -pe shmem 10
+#$ -pe shmem 20
 #$ -V
 #$ -P lindgren.prjc
 
@@ -34,6 +34,11 @@ readonly APPLY_VQSR_SCRIPT="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts
 readonly SCATTER_DIR_PREFIX="${WD}/scatter_annot_chr" # prefix to directories containing scatter annotation VCFs
 readonly MERGED="${WD}/ukb_wes_${SUBSET}_sitesonly.vcf.gz" # name of merged sites-only VCF to create
 
+# input (pre-filter) and output (post-filter) VCF paths
+# NOTE: The input VCF to be filtered does not need to be the same VCF upon which the VQSR runs
+readonly IN=$1 # VCF to be filtered using VQSR output
+readonly OUT=$2 # output path for VCF after filter
+
 # maximum gaussian args (expected number of clusters in data)
 readonly MAX_GAUSS_SNP=6 # default: 6
 readonly MAX_GAUSS_INDEL=4 # default: 4
@@ -46,15 +51,15 @@ readonly RECAL_INDEL="${WD}/ukb_wes_${SUBSET}_indel_maxgauss${MAX_GAUSS_INDEL}"
 readonly QUEUE_RECAL="long.qf"
 readonly QUEUE_APPLY="long.qf"
 
-# number of cores
-readonly N_CORES_RECAL=
+# number of cores to be used by jobs submitted by this script
+readonly N_CORES_RECAL=10
+readonly N_CORES_APPLY=10
 
 # memory to be used by GATK as Java limits during various parts of the pipeline
 # NOTE: MEM_RECAL and MEM_APPLY should depend on what queues and numbers of cores are specified above
-
-readonly MEM_EXCESSHET=30
-readonly MEM_RECAL=20
-readonly MEM_APPLY=10
+readonly MEM_EXCESSHET=30 # this memory should be determined by the memory allocated to this script
+readonly MEM_RECAL=30
+readonly MEM_APPLY=30
 
 time_check() {
   echo -e "\n########\n$1 (job id: ${JOB_ID}.${SGE_TASK_ID}, $(date))\n########"
@@ -144,33 +149,16 @@ JOB_NAME_SNP=$( submit_recal "snp" ${RECAL_SNP} ${MAX_GAUSS_SNP} )
 JOB_NAME_INDEL=$( submit_recal "indel" ${RECAL_INDEL} ${MAX_GAUSS_INDEL} )
 
 
+exit 0
+
 # submit ApplyVQSR job
 qsub -N "_${SUBSET}_apply_vqsr" \
-  -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL}
-  -pe
-if [ $( ls -1 ${RECAL_SNP}.{recal,tranches,recal.idx ) -ne 3 ]; then
-  time_check "Submitting SNP VariantRecalibrator job for ${SUBSET} cohort"
-  queue="long.qf"
-  n_cores=10
-  SNP_JOB_NAME="_${SUBSET}_snp_recal"
-  qsub -N ${SNP_JOB_NAME} \
-    ${VARIANT_RECAL_SCRIPT} \
-    ${TMP_EXCESSHET} \
-    ${MAX_GAUSS_SNP} \
-    ${RECAL_SNP} \
-    ${MEM}
-fi
-
-f [ $( ls -1 ${RECAL_INDEL}.{recal,tranches,recal.idx ) -ne 3 ]; then
-  time_check "Submitting INDEL VariantRecalibrator job for ${SUBSET} cohort"
-  queue="long.qf"
-  n_cores=10
-  SNP_JOB_NAME="_${SUBSET}_snp_recal"
-  qsub -N ${SNP_JOB_NAME} \
-    ${VARIANT_RECAL_SCRIPT} \
-    ${TMP_EXCESSHET} \
-    ${MAX_GAUSS_SNP} \
-    ${RECAL_SNP} \
-    ${MEM}
-fi
-
+  -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
+  -q ${QUEUE_APPLY} \
+  -pe shmem ${N_CORES_APPLY}
+  ${APPLY_VQSR_SCRIPT} \
+  ${IN} \
+  ${OUT} \
+  ${RECAL_SNP} \
+  ${RECAL_INDEL} \
+  ${MEM_APPLY}
