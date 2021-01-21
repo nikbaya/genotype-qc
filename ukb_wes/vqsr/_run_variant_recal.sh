@@ -13,6 +13,9 @@
 #$ -V
 #$ -P lindgren.prjc
 
+module load GATK/4.1.7.0-GCCcore-8.3.0-Java-11
+module load R/3.6.2-foss-2019b
+
 readonly IN=${1?Error: _run_variant_recal.sh requires the VCF to run VQSR on as 1st arg}
 readonly VARIANT_TYPE=${2?Error: _run_variant_recal.sh requires the variant type (snp or indel) as 2nd arg}
 readonly RECAL_PATH=${3?Error: _run_variant_recal.sh requires the output path prefix as 3rd arg} # output path
