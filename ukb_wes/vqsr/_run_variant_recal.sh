@@ -62,7 +62,7 @@ if [ "${VARIANT_TYPE}" == "snp" ]; then
      --tranches-file ${RECAL_PATH}.tranches
   readonly EXIT_CODE=$?
 
-elif [ $"${VARIANT_TYPE}" == "indel" ]; then
+elif [ "${VARIANT_TYPE}" == "indel" ]; then
   gatk --java-options "-Xmx${MEM}g -Xms${MEM}g  -XX:-UseParallelGC" VariantRecalibrator \
       -V ${IN} \
       --trust-all-polymorphic \
