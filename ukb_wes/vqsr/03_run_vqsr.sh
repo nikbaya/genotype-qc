@@ -30,13 +30,14 @@ readonly VARIANT_RECAL_SCRIPT="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scri
 readonly APPLY_VQSR_SCRIPT="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/_run_apply_vqsr.sh"
 
 # paths for merge step
-readonly SCATTER_DIR_PREFIX="${WD}/scatter_annot_chr" # prefix to directories containing scatter annotation VCFs
+# NOTE: SCATTER_DIR_PREFIX and PER_CHROM_PREFIX cannot both be set, one must be set to an empty string
+readonly SCATTER_DIR_PREFIX="${WD}/scatter_annot_chr" # prefix to directories containing scatter annotation sites-only VCFs
 readonly MERGED="${WD}/ukb_wes_${SUBSET}_sitesonly.vcf.gz" # name of merged sites-only VCF to create
 
 # input (pre-filter) and output (post-filter) VCF paths
 # NOTE: The input VCF to be filtered does not need to be the same VCF upon which the VQSR runs
-readonly IN=$1 # VCF to be filtered using VQSR output
-readonly OUT=$2 # output path for VCF after filter
+readonly IN="${WD}/ukb_wes_${SUBSET}_sitesonly.vcf.gz"  # VCF to be filtered using VQSR output
+readonly OUT="${WD}/ukb_wes_${SUBSET}_sitesonly_recal.vcf.gz" # output path for VCF after filter (ApplyVQSR step)
 
 # maximum gaussian args (expected number of clusters in data)
 readonly MAX_GAUSS_SNP=6 # default: 6
@@ -48,17 +49,17 @@ readonly RECAL_INDEL="${WD}/ukb_wes_${SUBSET}_indel_maxgauss${MAX_GAUSS_INDEL}"
 
 # queues to be used by jobs submitted by this script
 readonly QUEUE_RECAL="short.qe"
-readonly QUEUE_APPLY="short.qf"
+readonly QUEUE_APPLY="short.qe"
 
 # number of cores to be used by jobs submitted by this script
 readonly N_CORES_RECAL=2
-readonly N_CORES_APPLY=2
+readonly N_CORES_APPLY=1
 
 # memory in GB to be used by GATK as Java limits during various parts of the pipeline
 # NOTE: MEM_RECAL and MEM_APPLY should depend on what queues and numbers of cores are specified above
 readonly MEM_EXCESSHET=3 # this memory should be determined by the memory allocated to this script (3g per qf slot, 10g per qe slot)
 readonly MEM_RECAL=20
-readonly MEM_APPLY=6
+readonly MEM_APPLY=10
 
 time_check() {
   echo -e "\n########\n$1 (job id: ${JOB_ID}, $(date))\n########"
@@ -185,39 +186,35 @@ JOB_NAME_INDEL=$( submit_recal "indel" ${RECAL_INDEL} ${MAX_GAUSS_INDEL} )
 
 # submit ApplyVQSR job
 
-if [[ ! -z "${IN}" && ! -z "${OUT}" ]]; then
-  if [[ ${IN} != *".vcf.gz" && ${OUT} != *".vcf.gz"  ]]; then # if both paths don't end with ".vcf.gz"
-    if [[ ${IN} == *"chr" && ${OUT} == *"chr" ]]; then # if both paths end with "chr"
-      qsub -N "_${SUBSET}_apply_vqsr" \
-        -t 1:24 \
-        -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
-        -q ${QUEUE_APPLY} \
-        -pe shmem ${N_CORES_APPLY} \
-        ${APPLY_VQSR_SCRIPT} \
-        ${IN} \
-        ${OUT} \
-        ${RECAL_SNP} \
-        ${RECAL_INDEL} \
-        ${MEM_APPLY}
-    elif [[ ${IN} != *"chr" && ${OUT} != *"chr" ]]; then
-      qsub -N "_${SUBSET}_apply_vqsr" \
-        -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
-        -q ${QUEUE_APPLY} \
-        -pe shmem ${N_CORES_APPLY} \
-        ${APPLY_VQSR_SCRIPT} \
-        ${IN} \
-        ${OUT} \
-        ${RECAL_SNP} \
-        ${RECAL_INDEL} \
-        ${MEM_APPLY}
-    else
-      raise_error "IN and OUT args must either 1) both end in \"chr\"f or 2) both not end in \"chr\""
-    fi
+if [[ ${IN} != *".vcf.gz" && ${OUT} != *".vcf.gz"  ]]; then # if both paths don't end with ".vcf.gz"
+  if [[ ${IN} == *"chr" && ${OUT} == *"chr" ]]; then # if both paths end with "chr"
+    qsub -N "_${SUBSET}_apply_vqsr" \
+      -t 1:24 \
+      -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
+      -q ${QUEUE_APPLY} \
+      -pe shmem ${N_CORES_APPLY} \
+      ${APPLY_VQSR_SCRIPT} \
+      ${IN} \
+      ${OUT} \
+      ${RECAL_SNP} \
+      ${RECAL_INDEL} \
+      ${MEM_APPLY}
+  elif [[ ${IN} != *"chr" && ${OUT} != *"chr" ]]; then
+    qsub -N "_${SUBSET}_apply_vqsr" \
+      -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
+      -q ${QUEUE_APPLY} \
+      -pe shmem ${N_CORES_APPLY} \
+      ${APPLY_VQSR_SCRIPT} \
+      ${IN} \
+      ${OUT} \
+      ${RECAL_SNP} \
+      ${RECAL_INDEL} \
+      ${MEM_APPLY}
   else
-    raise_error "IN and OUT args cannot end with \".vcf.gz\", this suffix is added automatically"
+    raise_error "IN and OUT args must either 1) both end in \"chr\"f or 2) both not end in \"chr\""
   fi
 else
-  raise_error "Include IN and OUT file paths as 1st and 2nd args, respectively, in order to run ApplyVQSR step"
+  raise_error "IN and OUT args cannot end with \".vcf.gz\", this suffix is added automatically"
 fi
 
 duration=${SECONDS}
