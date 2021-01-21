@@ -182,17 +182,43 @@ submit_recal() {
 JOB_NAME_SNP=$( submit_recal "snp" ${RECAL_SNP} ${MAX_GAUSS_SNP} )
 JOB_NAME_INDEL=$( submit_recal "indel" ${RECAL_INDEL} ${MAX_GAUSS_INDEL} )
 
+
 # submit ApplyVQSR job
-qsub -N "_${SUBSET}_apply_vqsr" \
-  -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
-  -q ${QUEUE_APPLY} \
-  -pe shmem ${N_CORES_APPLY} \
-  ${APPLY_VQSR_SCRIPT} \
-  ${IN} \
-  ${OUT} \
-  ${RECAL_SNP} \
-  ${RECAL_INDEL} \
-  ${MEM_APPLY}
+
+if [[ ! -z "${IN}" && ! -z "${OUT}" ]]; then
+  if [[ ${IN} != *".vcf.gz" && ${OUT} != *".vcf.gz"  ]]; then # if both paths don't end with ".vcf.gz"
+    if [[ ${IN} == *"chr" && ${OUT} == *"chr" ]]; then # if both paths end with "chr"
+      qsub -N "_${SUBSET}_apply_vqsr" \
+        -t 1:24 \
+        -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
+        -q ${QUEUE_APPLY} \
+        -pe shmem ${N_CORES_APPLY} \
+        ${APPLY_VQSR_SCRIPT} \
+        ${IN} \
+        ${OUT} \
+        ${RECAL_SNP} \
+        ${RECAL_INDEL} \
+        ${MEM_APPLY}
+    elif [[ ${IN} != *"chr" && ${OUT} != *"chr" ]]; then
+      qsub -N "_${SUBSET}_apply_vqsr" \
+        -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
+        -q ${QUEUE_APPLY} \
+        -pe shmem ${N_CORES_APPLY} \
+        ${APPLY_VQSR_SCRIPT} \
+        ${IN} \
+        ${OUT} \
+        ${RECAL_SNP} \
+        ${RECAL_INDEL} \
+        ${MEM_APPLY}
+    else
+      raise_error "IN and OUT args must either 1) both end in \"chr\"f or 2) both not end in \"chr\""
+    fi
+  else
+    raise_error "IN and OUT args cannot end with \".vcf.gz\", this suffix is added automatically"
+  fi
+else
+  raise_error "Include IN and OUT file paths as 1st and 2nd args, respectively, in order to run ApplyVQSR step"
+fi
 
 duration=${SECONDS}
 echo "finished submitinng all VQSR jobs for ${SUBSET} cohort, $( elapsed_time ${duration} ) (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
