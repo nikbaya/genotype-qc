@@ -14,8 +14,8 @@
 #$ -N vqsr
 #$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/vqsr.log
 #$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/vqsr.errors.log
-#$ -q long.qf
-#$ -pe shmem 20
+#$ -q short.qe
+#$ -pe shmem 2
 #$ -V
 #$ -P lindgren.prjc
 
@@ -57,12 +57,12 @@ readonly N_CORES_APPLY=10
 
 # memory to be used by GATK as Java limits during various parts of the pipeline
 # NOTE: MEM_RECAL and MEM_APPLY should depend on what queues and numbers of cores are specified above
-readonly MEM_EXCESSHET=30 # this memory should be determined by the memory allocated to this script
+readonly MEM_EXCESSHET=20 # this memory should be determined by the memory allocated to this script
 readonly MEM_RECAL=30
 readonly MEM_APPLY=30
 
 time_check() {
-  echo -e "\n########\n$1 (job id: ${JOB_ID}.${SGE_TASK_ID}, $(date))\n########"
+  echo -e "\n########\n$1 (job id: ${JOB_ID}, $(date))\n########"
 }
 
 raise_error() {
@@ -92,7 +92,7 @@ if [ ! -f ${MERGED} ]; then
   bcftools concat \
     --file-list <( ls -1 ${SCATTER_DIR_PREFIX}*/*vcf.gz | sort -V ) \
     --naive \
-    --Oz \
+    -Oz \
     --threads 20 \
     -o ${MERGED}
 else
@@ -101,16 +101,15 @@ fi
 
 vcf_check ${MERGED}
 
-readonly TMP_EXCESSHET="${WD}/tmp-ukb_wes_${SUBSET}_sitesonly_excesshet.vcf.gz" # intermediate VCF filtered by excess heterozygosity
-
 
 
 # filter by excess heterozygosity
+readonly TMP_EXCESSHET="${WD}/tmp-ukb_wes_${SUBSET}_sitesonly_excesshet.vcf.gz" # intermediate VCF filtered by excess heterozygosity
 readonly EXCESSHET_MAX=54.69 # maximum ExcessHet value allowed, any variants with ExcessHet greater than this threshold will be filtered, i.e. removed (default: 54.69,  NOTE: this default comes from the GATK default pipeline and correspnods to a z-score of -4.5)
 
 if [ ! -f ${TMP_EXCESSHET} ]; then
-  time_check "Starting ExcessHet filter for ${SUBSET} cohort"
-  gatk --java-options "-Xmx${MEM}g -Xms${MEM}g -XX:-UseParallelGC" VariantFiltration \
+  time_check "Starting ExcessHet filter for ${SUBSET} cohort (remove variants with ExcessHet>${EXCESSHET_MAX})"
+  gatk --java-options "-Xmx${MEM_EXCESSHET}g -Xms${MEM_EXCESSHET}g -XX:-UseParallelGC" VariantFiltration \
     -V ${MERGED} \
     --filter-expression "ExcessHet > ${EXCESS_HET}" \
     --filter-name ExcessHet \
