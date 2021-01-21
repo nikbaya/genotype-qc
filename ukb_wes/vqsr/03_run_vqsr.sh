@@ -14,13 +14,12 @@
 #$ -N vqsr
 #$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/vqsr.log
 #$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/vqsr.errors.log
-#$ -q short.qe
-#$ -pe shmem 2
+#$ -q short.qf
+#$ -pe shmem 1
 #$ -V
 #$ -P lindgren.prjc
 
 module load GATK/4.1.7.0-GCCcore-8.3.0-Java-11
-module load R/3.6.2-foss-2019b
 
 readonly SUBSET="200k"
 
@@ -48,18 +47,18 @@ readonly RECAL_SNP="${WD}/ukb_wes_${SUBSET}_snp_maxgauss${MAX_GAUSS_SNP}"
 readonly RECAL_INDEL="${WD}/ukb_wes_${SUBSET}_indel_maxgauss${MAX_GAUSS_INDEL}"
 
 # queues to be used by jobs submitted by this script
-readonly QUEUE_RECAL="long.qf"
-readonly QUEUE_APPLY="long.qf"
+readonly QUEUE_RECAL="short.qe"
+readonly QUEUE_APPLY="short.qf"
 
 # number of cores to be used by jobs submitted by this script
-readonly N_CORES_RECAL=10
-readonly N_CORES_APPLY=10
+readonly N_CORES_RECAL=2
+readonly N_CORES_APPLY=2
 
-# memory to be used by GATK as Java limits during various parts of the pipeline
+# memory in GB to be used by GATK as Java limits during various parts of the pipeline
 # NOTE: MEM_RECAL and MEM_APPLY should depend on what queues and numbers of cores are specified above
-readonly MEM_EXCESSHET=20 # this memory should be determined by the memory allocated to this script
-readonly MEM_RECAL=30
-readonly MEM_APPLY=30
+readonly MEM_EXCESSHET=3 # this memory should be determined by the memory allocated to this script (3g per qf slot, 10g per qe slot)
+readonly MEM_RECAL=20
+readonly MEM_APPLY=6
 
 time_check() {
   echo -e "\n########\n$1 (job id: ${JOB_ID}, $(date))\n########"
@@ -82,26 +81,63 @@ vcf_check() {
   fi
 }
 
+get_chr_str() {
+  local CHR=$1
+  if [ ${CHR} -eq 23 ]; then
+    CHR="X"
+  elif [ ${CHR} -eq 24 ]; then
+    CHR="Y"
+  fi
+  echo ${CHR}
+}
+
+tabix_check() {
+  local VCF=$1
+  if [ ! -f ${VCF}.tbi ]; then
+    tabix -p vcf ${VCF}
+    if [[ $? -ne 0 ]]; then
+      raise_error "tabix of ${VCF} did not successfully complete"
+    fi
+  else
+    time_check "Warning: ${VCF}.tbi already exists, skipping tabix step"
+  fi
+}
+
 SECONDS=0
 
 
 
-# merge genomic interval VCFs
+# two-step merge genomic interval VCFs
 if [ ! -f ${MERGED} ]; then
   time_check "Starting merge for ${SUBSET} cohort"
+  # first step of merge: genomic intervals -> per-chrom VCFs
+  readonly TMP_MERGE_PREFIX="${WD}/tmp-merge_chr" # prefix of path for intermediate merged chromosome VCF
+  for chr_idx in {1..24}; do
+    chr=$( get_chr_str ${chr_idx} )
+    if [ ! -f ${TMP_MERGE_PREFIX}${chr}.vcf.gz ]; then
+      bcftools concat \
+        --file-list <( ls -1 ${SCATTER_DIR_PREFIX}${chr}/*vcf.gz | sort -V ) \
+        --allow-overlaps \
+        --rm-dups all \
+        -Oz \
+        -o ${TMP_MERGE_PREFIX}${chr}.vcf.gz
+    fi
+  done
+
+  # second stage
   bcftools concat \
-    --file-list <( ls -1 ${SCATTER_DIR_PREFIX}*/*vcf.gz | sort -V ) \
+    --file-list <( ls -1 ${TMP_MERGE_PREFIX}*.vcf.gz ) \
     --naive \
     -Oz \
-    --threads 20 \
-    -o ${MERGED}
+    -o ${MERGED} \
+  && echo "Removing intermediate VCFs with paths matching ${TMP_MERGE_PREFIX}*" \
+  && rm ${TMP_MERGE_PREFIX}*.vcf.gz
 else
   time_check "Warning: ${MERGED} already exists, skipping merge step"
 fi
 
 vcf_check ${MERGED}
-
-
+tabix_check ${MERGED}
 
 # filter by excess heterozygosity
 readonly TMP_EXCESSHET="${WD}/tmp-ukb_wes_${SUBSET}_sitesonly_excesshet.vcf.gz" # intermediate VCF filtered by excess heterozygosity
@@ -111,7 +147,7 @@ if [ ! -f ${TMP_EXCESSHET} ]; then
   time_check "Starting ExcessHet filter for ${SUBSET} cohort (remove variants with ExcessHet>${EXCESSHET_MAX})"
   gatk --java-options "-Xmx${MEM_EXCESSHET}g -Xms${MEM_EXCESSHET}g -XX:-UseParallelGC" VariantFiltration \
     -V ${MERGED} \
-    --filter-expression "ExcessHet > ${EXCESS_HET}" \
+    --filter-expression "ExcessHet > ${EXCESSHET_MAX}" \
     --filter-name ExcessHet \
     -O ${TMP_EXCESSHET}
 else
@@ -119,8 +155,7 @@ else
 fi
 
 vcf_check ${TMP_EXCESSHET}
-
-
+tabix_check ${TMP_EXCESSHET}
 
 # submit VariantRecalibrator jobs
 
@@ -128,7 +163,7 @@ submit_recal() {
   local VARIANT_TYPE=$1 # "snp" or "indel"
   local RECAL_PATH=$2 # prefix for recal output
   local MAX_GAUSS=$3 # max gaussian argument
-  if [ $( ls -1 ${RECAL_PATH}.{recal,tranches,recal.idx} ) -ne 3 ]; then
+  if [ $( ls -1 ${RECAL_PATH}.{recal,tranches,recal.idx} 2> /dev/null | wc -l ) -ne 3 ]; then
     local JOB_NAME="_${SUBSET}_${VARIANT_TYPE}_recal"
     qsub -N ${JOB_NAME} \
       -q ${QUEUE_RECAL} \
@@ -147,17 +182,17 @@ submit_recal() {
 JOB_NAME_SNP=$( submit_recal "snp" ${RECAL_SNP} ${MAX_GAUSS_SNP} )
 JOB_NAME_INDEL=$( submit_recal "indel" ${RECAL_INDEL} ${MAX_GAUSS_INDEL} )
 
-
-exit 0
-
 # submit ApplyVQSR job
 qsub -N "_${SUBSET}_apply_vqsr" \
   -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
   -q ${QUEUE_APPLY} \
-  -pe shmem ${N_CORES_APPLY}
+  -pe shmem ${N_CORES_APPLY} \
   ${APPLY_VQSR_SCRIPT} \
   ${IN} \
   ${OUT} \
   ${RECAL_SNP} \
   ${RECAL_INDEL} \
   ${MEM_APPLY}
+
+duration=${SECONDS}
+echo "finished submitinng all VQSR jobs for ${SUBSET} cohort, $( elapsed_time ${duration} ) (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
