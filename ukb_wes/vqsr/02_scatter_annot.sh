@@ -24,28 +24,39 @@ readonly CHR
 readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr"
 readonly ANNOT_CHUNK_SCRIPT="${WD}/scripts/_run_annot_chunk.sh" # internal script called on each genomic interval chunk
 
-# 200k
-#readonly IN="/well/ukbb-wes/pvcf/oqfe/ukbb-wes-oqfe-pvcf-chr${CHR}.vcf.gz"
-#readonly OUT_DIR="${WD}/vcf/ukb_wes_200k/scatter_annot_chr${CHR}" # output directory
-#readonly OUT_PREFIX="${OUT_DIR}/ukb_wes_oqfe_pvcf_chr${CHR}" # output VCF path prefi
+readonly COHORT="150k" # options: 200k, 100, 150l, 50k
 
-# 100 re-called samples
-#readonly IN="/well/lindgren/UKBIOBANK/saskia/haplo_50/ggvcf_chr${CHR}.vcf.gz" # VCF to split into chunks and annotate
-#readonly OUT_DIR="${WD}/vcf/haplo_50/annot" # output directory
-#readonly OUT_PREFIX="${OUT_DIR}/haplo_50_gvcf_chr${CHR}" # output VCF path prefix
+if [[ "${COHORT}" == "200k" ]]; then
+  # full 200k WES cohort
+  readonly IN="/well/ukbb-wes/pvcf/oqfe/ukbb-wes-oqfe-pvcf-chr${CHR}.vcf.gz"
+  readonly OUT_DIR="${WD}/vcf/ukb_wes_200k/scatter_annot_chr${CHR}" # output directory
+  readonly OUT_PREFIX="${OUT_DIR}/ukb_wes_oqfe_pvcf_chr${CHR}" # output VCF path prefi
+elif [[ "${COHORT}" == "100" ]]; then
+  # 100 re-called samples
+  readonly IN="/well/lindgren/UKBIOBANK/saskia/haplo_50/ggvcf_chr${CHR}.vcf.gz" # VCF to split into chunks and annotate
+  readonly OUT_DIR="${WD}/vcf/haplo_50/annot" # output directory
+  readonly OUT_PREFIX="${OUT_DIR}/haplo_50_gvcf_chr${CHR}" # output VCF path prefix
+  readonly MAX_CHUNK_SIZE= # NOTE: setting this here will mean that any attempts to change it below will be ignored
+elif [[ "${COHORT}" == "150k" ]]; then
+  # 150k subset cohort
+  readonly IN="/well/lindgren/UKBIOBANK/nbaya/resources/ukb_wes_150k/ukb_wes_oqfe_pvcf_150k_chr${CHR}.vcf.gz"
+  readonly OUT_DIR="${WD}/vcf/ukb_wes_150k/scatter_annot_chr${CHR}" # output directory for scatter
+  readonly OUT_PREFIX="${OUT_DIR}/ukb_wes_oqfe_pvcf_150k_chr${CHR}" # output VCF path prefix
+elif [[ "${COHORT}" == "50k" ]]; then
+  # 50k subset cohort
+  readonly IN="/well/lindgren/UKBIOBANK/nbaya/resources/ukb_wes_50k/ukb_wes_oqfe_pvcf_50k_chr${CHR}.vcf.gz"
+  readonly OUT_DIR="${WD}/vcf/ukb_wes_50k/scatter_annot_chr${CHR}" # output directory for scatter
+  readonly OUT_PREFIX="${OUT_DIR}/ukb_wes_oqfe_pvcf_50k_chr${CHR}" # output VCF path prefix
+else
+  # custom args
+  readonly IN=
+  readonly OUT_DIR=
+  readonly OUT_PREFIX=
+fi
 
-# 150k cohort
-readonly IN="/well/lindgren/UKBIOBANK/nbaya/resources/ukb_wes_150k/ukb_wes_oqfe_pvcf_150k_chr${CHR}.vcf.gz"
-readonly OUT_DIR="${WD}/vcf/ukb_wes_150k/scatter_annot_chr${CHR}" # output directory for scatter
-#readonly OUT_PREFIX="${WD}/ukb_wes_oqfe_pvcf_chr" # output VCF path prefix
-readonly OUT_PREFIX="${OUT_DIR}/ukb_wes_oqfe_pvcf_150k_chr${CHR}" # output VCF path prefix
-
-# 50k cohort
-#readonly IN="/well/lindgren/UKBIOBANK/nbaya/resources/ukb_wes_50k/ukb_wes_oqfe_pvcf_50k_chr${CHR}.vcf.gz"
-#readonly OUT_DIR="${WD}/vcf/ukb_wes_50k/scatter_annot_chr${CHR}" # output directory for scatter
-#readonly OUT_PREFIX="${WD}/ukb_wes_oqfe_pvcf_chr" # output VCF path prefix
-#readonly OUT_PREFIX="${OUT_DIR}/ukb_wes_oqfe_pvcf_50k_chr${CHR}" # output VCF path prefix
-
+if [[ -z $IN || -z ${OUT_DIR} || -z ${OUT_PREFIX} ]]; then
+  >&2 "Error: Variables IN, OUT_DIR, OUT_PREFIX must all be defined" && exit 1
+fi
 
 # split unique base pair positons of variants into equal chunk
 # MAX_CHUNK_SIZE: maximum number of base pair positions per chunk, default: 10000 (set to empty string to do full chromosome)
