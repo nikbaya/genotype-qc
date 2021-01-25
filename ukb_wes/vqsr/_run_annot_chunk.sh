@@ -72,11 +72,13 @@ fi
 if [ ! -f ${OUT} ]; then
 
   set -x
+  # NOTE: 2nd row of annotations are annotations that will not be calculated in the 200k cohort because of missing fields
   gatk --java-options "-Xmx${MEM}g -Xms${MEM}g -XX:-UseParallelGC" \
     VariantAnnotator \
     -V ${IN} \
     -L ${INTERVAL} \
     -A ExcessHet -A InbreedingCoeff -A StrandOddsRatio -A QualByDepth -A FisherStrand \
+    -A ReadPosRankSumTest -A MappingQualityRankSumTest -A Coverage -A RMSMappingQuality \
     -ped ${PED} \
     --sites-only-vcf-output \
     -O ${OUT}
