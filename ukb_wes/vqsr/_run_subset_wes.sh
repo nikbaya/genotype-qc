@@ -49,8 +49,10 @@ vcf_check ${IN}
 
 SECONDS=0
 
+set -x
+
 if [ ! -f ${OUT} ]; then
-  set -x
+  mkdir -p ${OUT_DIR}
   bcftools view \
     ${IN} \
     --samples-file ${SAMPLES} \
@@ -58,10 +60,19 @@ if [ ! -f ${OUT} ]; then
     -Oz \
     --threads 40 \
     -o ${OUT}
-  set +x
 fi
 
 vcf_check ${OUT}
+
+if [ ! -f ${OUT}.tbi ]; then
+  tabix -p vcf ${OUT} \
+  || raise_error "tabix file for ${OUT} did not successfully write"
+  #module load GATK/4.1.7.0-GCCcore-8.3.0-Java-11
+  #readonly MEM=10
+  #gatk --java-options "-Xmx${MEM}g -Xms${MEM}g -XX:-UseParallelGC" IndexFeatureFile \
+  #  -I ${OUT}
+
+fi
 
 duration=${SECONDS}
 echo "${SUBSET} chr${CHR} finished, $( elapsed_time ${duration} ) (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
