@@ -21,45 +21,61 @@
 
 module load GATK/4.1.7.0-GCCcore-8.3.0-Java-11
 
-readonly SUBSET="200k"
+# options: ukb_wes_200k, haplo_50, ukb_wes_150k, ukb_wes_50k
+readonly SUBSET="ukb_wes_200k"
+#readonly SUBSET="haplo_50"
+#readonly SUBSET="haplo_50"
 
-readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/vcf/ukb_wes_${SUBSET}"
+readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/vcf/${SUBSET}"
 
 # scripts being called at the end
 readonly VARIANT_RECAL_SCRIPT="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/_run_variant_recal.sh"
 readonly APPLY_VQSR_SCRIPT="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/_run_apply_vqsr.sh"
 
 # paths for merge step
-# NOTE: SCATTER_DIR_PREFIX and PER_CHROM_PREFIX cannot both be set, one must be set to an empty string
 readonly SCATTER_DIR_PREFIX="${WD}/scatter_annot_chr" # prefix to directories containing scatter annotation sites-only VCFs
-readonly MERGED="${WD}/ukb_wes_${SUBSET}_sitesonly.vcf.gz" # name of merged sites-only VCF to create
+readonly PER_CHROM_MERGE_PREFIX="${WD}/tmp-merge_chr"
+#readonly PER_CHROM_MERGE_PREFIX="${WD}/annot/haplo_50_gvcf_chr" # prefix of path for intermediate merged chromosome VCF, default: ${WD}/tmp-merge_chr (can also be input paths for sites-only VCFs, if scatter annotation wasn't used; in this case, SCATTER_DIR_PREFIX is ignored by the script)
+readonly MERGED="${WD}/${SUBSET}_sitesonly.vcf.gz" # name of merged sites-only VCF to create
+
+# set of annotations to use during VariantRecalibrator
+readonly ANNOT_SET="limited" # options: full or limited (3 annotations)
 
 # input (pre-filter) and output (post-filter) VCF paths
 # NOTE: The input VCF to be filtered does not need to be the same VCF upon which the VQSR runs
-readonly IN="${WD}/ukb_wes_${SUBSET}_sitesonly.vcf.gz"  # VCF to be filtered using VQSR output
-readonly OUT="${WD}/ukb_wes_${SUBSET}_sitesonly_recal.vcf.gz" # output path for VCF after filter (ApplyVQSR step)
+readonly FILTER_LEVEL="99.7" # filter level for ApplyVQSR step (default: 99.7)
+readonly IN="${WD}/${SUBSET}_sitesonly.vcf.gz"  # VCF to be filtered using VQSR output
+readonly OUT="${WD}/${SUBSET}_sitesonly_recal_annot${ANNOT_SET}_filter${FILTER_LEVEL}.vcf.gz" # output path for VCF after filter (ApplyVQSR step)
+#readonly IN="${WD}/${SUBSET}_chr2_sitesonly.vcf.gz"
+#readonly OUT="${WD}/${SUBSET}_chr2_sitesonly_recal_fl${FILTER_LEVEL}.vcf.gz"
+#readonly IN=${MERGED}
+#readonly OUT="${WD}/${SUBSET}_sitesonly_recal_annot${ANNOT_SET}_filter${FILTER_LEVEL}.vcf.gz"
+#readonly IN="${WD}/${SUBSET}_sitesonly_chr10.vcf.gz"
+#readonly OUT="${WD}/${SUBSET}_sitesonly_chr10_recal_annot${ANNOT_SET}_filter${FILTER_LEVEL}.vcf.gz"
+#readonly IN="/well/lindgren/UKBIOBANK/saskia/haplo_50/ggvcf_chr21.vcf.gz"
+#readonly OUT="${WD}/${SUBSET}_sitesonly_chr21_recal_annot${ANNOT_SET}_filter${FILTER_LEVEL}.vcf.gz"
 
 # maximum gaussian args (expected number of clusters in data)
 readonly MAX_GAUSS_SNP=6 # default: 6
 readonly MAX_GAUSS_INDEL=4 # default: 4
 
 # file prefixes for output of VariantRecalibrator
-readonly RECAL_SNP="${WD}/ukb_wes_${SUBSET}_snp_maxgauss${MAX_GAUSS_SNP}"
-readonly RECAL_INDEL="${WD}/ukb_wes_${SUBSET}_indel_maxgauss${MAX_GAUSS_INDEL}"
+readonly RECAL_SNP="${WD}/${SUBSET}_snp_annot${ANNOT_SET}_maxgauss${MAX_GAUSS_SNP}"
+readonly RECAL_INDEL="${WD}/${SUBSET}_indel_annot${ANNOT_SET}_maxgauss${MAX_GAUSS_INDEL}"
 
 # queues to be used by jobs submitted by this script
 readonly QUEUE_RECAL="short.qe"
-readonly QUEUE_APPLY="short.qe"
+readonly QUEUE_APPLY="short.qf"
 
 # number of cores to be used by jobs submitted by this script
 readonly N_CORES_RECAL=2
-readonly N_CORES_APPLY=1
+readonly N_CORES_APPLY=10
 
 # memory in GB to be used by GATK as Java limits during various parts of the pipeline
 # NOTE: MEM_RECAL and MEM_APPLY should depend on what queues and numbers of cores are specified above
 readonly MEM_EXCESSHET=3 # this memory should be determined by the memory allocated to this script (3g per qf slot, 10g per qe slot)
 readonly MEM_RECAL=20
-readonly MEM_APPLY=10
+readonly MEM_APPLY=35
 
 time_check() {
   echo -e "\n########\n$1 (job id: ${JOB_ID}, $(date))\n########"
@@ -112,27 +128,32 @@ SECONDS=0
 if [ ! -f ${MERGED} ]; then
   time_check "Starting merge for ${SUBSET} cohort"
   # first step of merge: genomic intervals -> per-chrom VCFs
-  readonly TMP_MERGE_PREFIX="${WD}/tmp-merge_chr" # prefix of path for intermediate merged chromosome VCF
   for chr_idx in {1..24}; do
     chr=$( get_chr_str ${chr_idx} )
-    if [ ! -f ${TMP_MERGE_PREFIX}${chr}.vcf.gz ]; then
+    if [ ! -f ${PER_CHROM_MERGE_PREFIX}${chr}.vcf.gz ]; then
       bcftools concat \
         --file-list <( ls -1 ${SCATTER_DIR_PREFIX}${chr}/*vcf.gz | sort -V ) \
         --allow-overlaps \
         --rm-dups all \
         -Oz \
-        -o ${TMP_MERGE_PREFIX}${chr}.vcf.gz
+        -o ${PER_CHROM_MERGE_PREFIX}${chr}.vcf.gz
+    else
+      echo "Warning: ${PER_CHROM_MERGE_PREFIX}${chr}.vcf.gz already exists, skipping merge of genomic interval VCFs"
     fi
+    vcf_check ${PER_CHROM_MERGE_PREFIX}${chr}.vcf.gz
   done
 
   # second stage
   bcftools concat \
-    --file-list <( ls -1 ${TMP_MERGE_PREFIX}*.vcf.gz ) \
+    --file-list <( ls -1 ${PER_CHROM_MERGE_PREFIX}*.vcf.gz ) \
     --naive \
     -Oz \
     -o ${MERGED} \
-  && echo "Removing intermediate VCFs with paths matching ${TMP_MERGE_PREFIX}*" \
-  && rm ${TMP_MERGE_PREFIX}*.vcf.gz
+
+  if [[ "${PER_CHROM_MERGE_PREFIX}" == *"tmp-"* ]]; then
+    echo "Removing intermediate VCFs with paths matching ${PER_CHROM_MERGE_PREFIX}*" \
+    && rm ${PER_CHROM_MERGE_PREFIX}*.vcf.gz
+  fi
 else
   time_check "Warning: ${MERGED} already exists, skipping merge step"
 fi
@@ -141,7 +162,7 @@ vcf_check ${MERGED}
 tabix_check ${MERGED}
 
 # filter by excess heterozygosity
-readonly TMP_EXCESSHET="${WD}/tmp-ukb_wes_${SUBSET}_sitesonly_excesshet.vcf.gz" # intermediate VCF filtered by excess heterozygosity
+readonly TMP_EXCESSHET="${WD}/tmp-${SUBSET}_sitesonly_excesshet.vcf.gz" # intermediate VCF filtered by excess heterozygosity
 readonly EXCESSHET_MAX=54.69 # maximum ExcessHet value allowed, any variants with ExcessHet greater than this threshold will be filtered, i.e. removed (default: 54.69,  NOTE: this default comes from the GATK default pipeline and correspnods to a z-score of -4.5)
 
 if [ ! -f ${TMP_EXCESSHET} ]; then
@@ -150,7 +171,8 @@ if [ ! -f ${TMP_EXCESSHET} ]; then
     -V ${MERGED} \
     --filter-expression "ExcessHet > ${EXCESSHET_MAX}" \
     --filter-name ExcessHet \
-    -O ${TMP_EXCESSHET}
+    -O ${TMP_EXCESSHET} \
+  || raise_error "GATK ExcessHet filter on ${MERGED} failed"
 else
   time_check "Warning: ${TMP_EXCESSHET} already exists, skipping removal of variants with ExcessHet>${EXCESSHET_MAX}"
 fi
@@ -164,17 +186,19 @@ submit_recal() {
   local VARIANT_TYPE=$1 # "snp" or "indel"
   local RECAL_PATH=$2 # prefix for recal output
   local MAX_GAUSS=$3 # max gaussian argument
+  local JOB_NAME="_${SUBSET}_${VARIANT_TYPE}_recal_${ANNOT_SET}"
   if [ $( ls -1 ${RECAL_PATH}.{recal,tranches,recal.idx} 2> /dev/null | wc -l ) -ne 3 ]; then
-    local JOB_NAME="_${SUBSET}_${VARIANT_TYPE}_recal"
     qsub -N ${JOB_NAME} \
+      -terse \
       -q ${QUEUE_RECAL} \
       -pe shmem ${N_CORES_RECAL} \
       ${VARIANT_RECAL_SCRIPT} \
       ${TMP_EXCESSHET} \
       ${VARIANT_TYPE} \
+      ${ANNOT_SET} \
       ${RECAL_PATH} \
       ${MAX_GAUSS} \
-      ${MEM_RECAL}
+      ${MEM_RECAL} > /dev/null
   fi
   echo ${JOB_NAME}
 }
@@ -186,35 +210,36 @@ JOB_NAME_INDEL=$( submit_recal "indel" ${RECAL_INDEL} ${MAX_GAUSS_INDEL} )
 
 # submit ApplyVQSR job
 
-if [[ ${IN} != *".vcf.gz" && ${OUT} != *".vcf.gz"  ]]; then # if both paths don't end with ".vcf.gz"
-  if [[ ${IN} == *"chr" && ${OUT} == *"chr" ]]; then # if both paths end with "chr"
-    qsub -N "_${SUBSET}_apply_vqsr" \
-      -t 1:24 \
-      -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
-      -q ${QUEUE_APPLY} \
-      -pe shmem ${N_CORES_APPLY} \
-      ${APPLY_VQSR_SCRIPT} \
-      ${IN} \
-      ${OUT} \
-      ${RECAL_SNP} \
-      ${RECAL_INDEL} \
-      ${MEM_APPLY}
-  elif [[ ${IN} != *"chr" && ${OUT} != *"chr" ]]; then
-    qsub -N "_${SUBSET}_apply_vqsr" \
-      -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
-      -q ${QUEUE_APPLY} \
-      -pe shmem ${N_CORES_APPLY} \
-      ${APPLY_VQSR_SCRIPT} \
-      ${IN} \
-      ${OUT} \
-      ${RECAL_SNP} \
-      ${RECAL_INDEL} \
-      ${MEM_APPLY}
-  else
-    raise_error "IN and OUT args must either 1) both end in \"chr\"f or 2) both not end in \"chr\""
-  fi
+if [[ ${IN} == *"chr" && ${OUT} == *"chr" ]]; then # if both paths end with "chr"
+  set -x
+  qsub -N "_${SUBSET}_apply_vqsr" \
+    -t 1:24 \
+    -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
+    -q ${QUEUE_APPLY} \
+    -pe shmem ${N_CORES_APPLY} \
+    ${APPLY_VQSR_SCRIPT} \
+    ${IN} \
+    ${OUT} \
+    ${RECAL_SNP} \
+    ${RECAL_INDEL} \
+    ${FILTER_LEVEL} \
+    ${MEM_APPLY}
+  set +x
 else
-  raise_error "IN and OUT args cannot end with \".vcf.gz\", this suffix is added automatically"
+  vcf_check ${IN}
+  set -x
+  qsub -N "_${SUBSET}_apply_vqsr" \
+    -hold_jid ${JOB_NAME_SNP},${JOB_NAME_INDEL} \
+    -q ${QUEUE_APPLY} \
+    -pe shmem ${N_CORES_APPLY} \
+    ${APPLY_VQSR_SCRIPT} \
+    ${IN} \
+    ${OUT} \
+    ${RECAL_SNP} \
+    ${RECAL_INDEL} \
+    ${FILTER_LEVEL} \
+    ${MEM_APPLY}
+  set +x
 fi
 
 duration=${SECONDS}
