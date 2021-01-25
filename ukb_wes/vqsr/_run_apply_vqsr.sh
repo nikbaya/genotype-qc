@@ -8,8 +8,8 @@
 #$ -N _apply_vqsr
 #$ -o /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/apply_vqsr.log
 #$ -e /well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/apply_vqsr.errors.log
-#$ -q short.qf
-#$ -pe shmem 1
+#$ -q short.qe
+#$ -pe shmem 2
 #$ -V
 #$ -P lindgren.prjc
 
@@ -19,9 +19,20 @@ readonly IN=${1?Error: _run_apply_vqsr.sh requires the VCF to be filtered by App
 readonly OUT=${2?Error: _run_apply_vqsr.sh requires the path of the output VCF as 2nd arg}
 readonly RECAL_SNP=${3?Error: _run_apply_vqsr.sh requires the snp recal path prefix as 3rd arg}
 readonly RECAL_INDEL=${4?Error: _run_apply_vqsr.sh requires the indel recal path prefix as 4th arg}
-readonly MEM=${5?Error: _run_apply_vqsr.sh requires the memory allocated to the GATK JVM as the 5th arg}
+readonly FILTER_LEVEL=${5?Error: _run_apply_vqsr.sh requires the filter level as 5th arg}
+readonly MEM=${6?Error: _run_apply_vqsr.sh requires the memory allocated to the GATK JVM as the 6th arg}
 
-readonly REF="/well/lindgren/UKBIOBANK/nbaya/resources/ref" # directory containing reference files
+set -x
+if [[ ${IN} == *"chr" && ${OUT} == *"chr" ]]; then # if both paths end with "chr"
+  if [ ${SGE_TASK_ID} -eq 23 ]; then
+    readonly CHR="X"
+  elif [ ${SGE_TASK_ID} -eq 24 ]; then
+    readonly CHR="Y"
+  else
+    readonly CHR=${SGE_TASK_ID}
+  fi
+  readonly SUFFIX="${CHR}.vcf.gz" # output file suffix, only relevant if IN/OUT arguments end in "chr"
+fi
 
 raise_error() {
   >&2 echo -e "Error: $1. Exiting."
@@ -44,19 +55,32 @@ vcf_check ${IN}
 
 SECONDS=0
 
-readonly TMP_APPLY_VCF="${RECAL_SNP}-tmp.vcf.gz" # intermediate VCF
+readonly TMP_APPLY_VCF="${RECAL_SNP}_filter${FILTER_LEVEL}-tmp.vcf.gz" # intermediate VCF
 
-if [ ! -f ${OUT} ]; then
+if [ ! -f ${OUT}${SUFFIX} ]; then
   if [ ! -f ${TMP_APPLY_VCF} ]; then
+    set -x
     # filter input file using SNP recalibration results
+#    gatk --java-options "-Xmx${MEM}g -Xms${MEM}g -XX:-UseParallelGC" ApplyVQSR \
+#      --tmp-dir /tmp/ \
+#      -V ${IN} \
+#      --recal-file ${RECAL_SNP}.recal \
+#      --tranches-file ${RECAL_SNP}.tranches \
+#      --truth-sensitivity-filter-level ${FILTER_LEVEL} \
+#      --create-output-variant-index true \
+#      -mode SNP \
+#      -O ${TMP_APPLY_VCF} \
+#    || echo "GATK exit code: $?"
     gatk --java-options "-Xmx${MEM}g -Xms${MEM}g -XX:-UseParallelGC" ApplyVQSR \
+      --tmp-dir /tmp/ \
       -V ${IN} \
-      --recal-file ${RECAL_SNP}.recal \
-      --tranches-file ${RECAL_SNP}.tranches \
-      --truth-sensitivity-filter-level 99.7 \
+      --recal-file ${RECAL_INDEL}.recal \
+      --tranches-file ${RECAL_INDEL}.tranches \
+      --truth-sensitivity-filter-level ${FILTER_LEVEL} \
       --create-output-variant-index true \
-      -mode SNP \
-      -O ${TMP_APPLY_VCF}
+      -mode INDEL \
+      -O ${TMP_APPLY_VCF} \
+    || echo "GATK exit code: $?"
   else
     echo "Warning: ${TMP_APPLY_VCF} already exists, skipping first stage of ApplyVQSR"
   fi
@@ -64,21 +88,37 @@ if [ ! -f ${OUT} ]; then
   vcf_check ${TMP_APPLY_VCF}
 
   # filter intermediate file using INDEL recalibration results
+#  gatk --java-options "-Xmx${MEM}g -Xms${MEM}g -XX:-UseParallelGC" ApplyVQSR \
+#    --tmp-dir /tmp/ \
+#    -V ${TMP_APPLY_VCF} \
+#    --recal-file ${RECAL_INDEL}.recal \
+#    --tranches-file ${RECAL_INDEL}.tranches \
+#    --truth-sensitivity-filter-level ${FILTER_LEVEL} \
+#    --create-output-variant-index true \
+#    -mode INDEL \
+#    -O ${OUT}${SUFFIX} \
+#  || echo "GATK exit code: $?"
   gatk --java-options "-Xmx${MEM}g -Xms${MEM}g -XX:-UseParallelGC" ApplyVQSR \
+    --tmp-dir /tmp/ \
     -V ${TMP_APPLY_VCF} \
-    --recal-file ${RECAL_INDEL}.recal \
-    --tranches-file ${RECAL_INDEL}.tranches \
-    --truth-sensitivity-filter-level 99.7 \
+    --recal-file ${RECAL_SNP}.recal \
+    --tranches-file ${RECAL_SNP}.tranches \
+    --truth-sensitivity-filter-level ${FILTER_LEVEL} \
     --create-output-variant-index true \
-    -mode INDEL \
-    -O ${OUT}
+    -mode SNP \
+    -O ${OUT}${SUFFIX} \
+  || echo "GATK exit code: $?"
+  set +x
 else
-  echo "Warning: ${OUT} already exists, skipping ApplyVQSR"
+  echo "Warning: ${OUT}${SUFFIX} already exists, skipping ApplyVQSR"
 fi
 
-vcf_check ${OUT}
+vcf_check ${OUT}${SUFFIX}
 
-rm ${TMP_APPLY_VCF} && echo "Removed
+# save VCF variant count
+touch ${OUT}${SUFFIX}_fl${FILTER_LEVEL}_$( bcftools view -H ${OUT}${SUFFIX} | wc -l )
+
+rm ${TMP_APPLY_VCF}{,.tbi} && echo "Removed intermediate file: ${TMP_APPLY_VCF}"
 
 duration=${SECONDS}
-echo "finished ${VARIANT_TYPE} variant recal, $( elapsed_time ${duration} ) (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
+echo "finished ${VARIANT_TYPE} ApplyVQSR, $( elapsed_time ${duration} ) (job id: ${JOB_ID}.${SGE_TASK_ID} $( date ))"
