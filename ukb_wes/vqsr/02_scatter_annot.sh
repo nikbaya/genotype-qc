@@ -24,29 +24,24 @@ readonly CHR
 readonly WD="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr"
 readonly ANNOT_CHUNK_SCRIPT="${WD}/scripts/_run_annot_chunk.sh" # internal script called on each genomic interval chunk
 
-readonly COHORT="150k" # options: 200k, 100, 150l, 50k
+readonly COHORT="150k" # options: 200k, haplo_50, 150l, 50k
 
 if [[ "${COHORT}" == "200k" ]]; then
   # full 200k WES cohort
   readonly IN="/well/ukbb-wes/pvcf/oqfe/ukbb-wes-oqfe-pvcf-chr${CHR}.vcf.gz"
   readonly OUT_DIR="${WD}/vcf/ukb_wes_200k/scatter_annot_chr${CHR}" # output directory
-  readonly OUT_PREFIX="${OUT_DIR}/ukb_wes_oqfe_pvcf_chr${CHR}" # output VCF path prefi
-elif [[ "${COHORT}" == "100" ]]; then
-  # 100 re-called samples
+  readonly OUT_PREFIX="${OUT_DIR}/ukb_wes_oqfe_pvcf_chr${CHR}" # output annotated sites-only VCF path prefix
+elif [[ "${COHORT}" == "haplo_50" ]]; then
+  # 100 re-called samples for 50k cohort
   readonly IN="/well/lindgren/UKBIOBANK/saskia/haplo_50/ggvcf_chr${CHR}.vcf.gz" # VCF to split into chunks and annotate
   readonly OUT_DIR="${WD}/vcf/haplo_50/annot" # output directory
-  readonly OUT_PREFIX="${OUT_DIR}/haplo_50_gvcf_chr${CHR}" # output VCF path prefix
+  readonly OUT_PREFIX="${OUT_DIR}/haplo_50_gvcf_chr${CHR}" # output annotated sites-only VCF path prefix
   readonly MAX_CHUNK_SIZE= # NOTE: setting this here will mean that any attempts to change it below will be ignored
-elif [[ "${COHORT}" == "150k" ]]; then
-  # 150k subset cohort
-  readonly IN="/well/lindgren/UKBIOBANK/nbaya/resources/ukb_wes_150k/ukb_wes_oqfe_pvcf_150k_chr${CHR}.vcf.gz"
-  readonly OUT_DIR="${WD}/vcf/ukb_wes_150k/scatter_annot_chr${CHR}" # output directory for scatter
-  readonly OUT_PREFIX="${OUT_DIR}/ukb_wes_oqfe_pvcf_150k_chr${CHR}" # output VCF path prefix
-elif [[ "${COHORT}" == "50k" ]]; then
-  # 50k subset cohort
-  readonly IN="/well/lindgren/UKBIOBANK/nbaya/resources/ukb_wes_50k/ukb_wes_oqfe_pvcf_50k_chr${CHR}.vcf.gz"
-  readonly OUT_DIR="${WD}/vcf/ukb_wes_50k/scatter_annot_chr${CHR}" # output directory for scatter
-  readonly OUT_PREFIX="${OUT_DIR}/ukb_wes_oqfe_pvcf_50k_chr${CHR}" # output VCF path prefix
+elif [[ "${COHORT}" == "150k" || "${COHORT}" == "50k" ]]; then
+  # 150k or 50k subset cohorts
+  readonly IN="/well/lindgren/UKBIOBANK/nbaya/resources/ukb_wes_${COHORT}/ukb_wes_oqfe_pvcf_${COHORT}_chr${CHR}.vcf.gz"
+  readonly OUT_DIR="${WD}/vcf/ukb_wes_${COHORT}/scatter_annot_chr${CHR}" # output directory for scatter
+  readonly OUT_PREFIX="${OUT_DIR}/ukb_wes_oqfe_pvcf_${COHORT}_chr${CHR}" # output annotated sites-only VCF path prefix
 else
   # custom args
   readonly IN=
@@ -97,7 +92,7 @@ fi
 readonly QUEUE="short.qe" # queue to use for scattered annotation (default: short.qe, WARNING: short.qc seems to drop the jobs)
 readonly N_CORES=1 # number of cores (or "slots") to use (default: 1)
 readonly MEM=10 # memory in gb used for gat (default: 10 for 1 qe slot)
-
+set -x
 qsub -N "_c${CHR}_annot_chunk" \
   -q ${QUEUE} \
   -pe shmem ${N_CORES} \
