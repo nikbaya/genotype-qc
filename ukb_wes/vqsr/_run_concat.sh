@@ -11,9 +11,14 @@
 #$ -V
 #$ -P lindgren.prjc
 
+
+
 readonly FILE_LIST=${1?Error: _run_concat.sh requires the files to be concatenated as 1st arg} # input VCFs to concatenate
 readonly OUT=${2?Error: _run_concat.sh requires the output path as 2nd arg} # output path
-#readonly TMP_DIR=${3?Error: _run_concat.sh requires the temporary directory as 3rd arg} # temporary directory
+readonly TMP_DIR=${3?Error: _run_concat.sh requires the temporary directory as 3rd arg} # temporary directory
+readonly PARENT_JOB_ID=$4
+
+readonly CONCAT_SCRIPT="/well/lindgren/UKBIOBANK/nbaya/wes_200k/vqsr/scripts/_run_concat.sh"
 
 raise_error() {
   >&2 echo -e "Error: $1. Exiting."
@@ -44,19 +49,44 @@ done < ${FILE_LIST}
 
 SECONDS=0
 
+N_CHUNKS=10
+MAX_N_FILES=50
 if [ ! -f ${OUT} ]; then
   set -x
-  bcftools concat \
-    --file-list ${FILE_LIST} \
-    --allow-overlaps \
-    --rm-dups all \
-    -Oz \
-    -o ${OUT} \
-  || ( EXIT_CODE=$? \
-  && raise_error "concat did not exit properly (exit code: ${EXIT_CODE}, job id: ${JOB_ID} $( date ))" )
+  if [ $( cat ${FILE_LIST} | wc -l ) -gt ${MAX_N_FILES} ]; then
+    ID=$( uuidgen )
+    MANIFEST=${TMP_DIR}/${ID}.out.txt
+    for i in $( seq 1 ${N_CHUNKS} ); do
+      TMP_PREFIX=${TMP_DIR}/${ID}_${i}of${N_CHUNKS}
+      TMP_FILE_LIST=${TMP_PREFIX}.filelist.txt
+      TMP_VCF=${TMP_PREFIX}.vcf.gz
+      split -n l/$i/${N_CHUNKS} ${FILE_LIST} > ${TMP_FILE_LIST}
+      job_id=$( qsub -N _${i}_${N_CHUNKS}_concat \
+        -terse \
+        ${CONCAT_SCRIPT} \
+        ${TMP_FILE_LIST} \
+        ${TMP_VCF} \
+        ${TMP_DIR} )
+      echo "${TMP_VCF} ${job_id}" >> ${MANIFEST}
+    done
+    qsub -hold_jid $( awk -vORS=, '{ print $2 }' ${MANIFEST} | sed 's/,$/\n/' ) \
+      ${CONCAT_SCRIPT} \
+      ${MANIFEST} \
+      ${OUT} \
+      ${TMP_DIR}
+  else
+    bcftools concat \
+      --file-list <( awk '{ print $1 }' ${FILE_LIST} ) \
+      --allow-overlaps \
+      --rm-dups all \
+      -Oz \
+      -o ${OUT} \
+    || ( EXIT_CODE=$? \
+    && raise_error "concat did not exit properly (exit code: ${EXIT_CODE}, job id: ${JOB_ID} $( date ))" )
 
-  echo "starting tabix for ${OUT} (job id: ${JOB_ID} $( date ))"
-  make_tabix ${OUT}
+    echo "starting tabix for ${OUT} (job id: ${JOB_ID} $( date ))"
+    make_tabix ${OUT}
+  fi
 fi
 
 vcf_check ${OUT}
